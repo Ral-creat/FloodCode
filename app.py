@@ -11,7 +11,7 @@ st.write("Upload both datasets below to visualize yearly and monthly comparisons
 flood_file = st.file_uploader("📤 Upload Flood Dataset (CSV/XLSX)", type=["csv", "xlsx"])
 weather_file = st.file_uploader("📤 Upload Weather Dataset (CSV/XLSX)", type=["csv", "xlsx"])
 
-# ===== FLOOD DATASET =====
+# -------------------- FLOOD DATA --------------------
 if flood_file is not None:
     try:
         if flood_file.name.endswith(".csv"):
@@ -20,20 +20,19 @@ if flood_file is not None:
             flood_df = pd.read_excel(flood_file)
         st.success("✅ Flood dataset loaded successfully!")
 
-        # Detect date/year column
+        # Auto-detect date/year column
         date_cols = [col for col in flood_df.columns if 'date' in col.lower() or 'year' in col.lower()]
         if len(date_cols) == 0:
             st.warning("⚠️ No 'year' or 'date' column detected in flood dataset.")
         else:
             date_col = date_cols[0]
-
-            # Only create year column if not existing
-            if 'year' not in flood_df.columns:
+            if 'date' in date_col.lower():
                 flood_df[date_col] = pd.to_datetime(flood_df[date_col], errors='coerce')
                 flood_df['year'] = flood_df[date_col].dt.year
-
-            if 'month' not in flood_df.columns:
-                flood_df['month'] = pd.to_datetime(flood_df[date_col], errors='coerce').dt.month_name()
+                flood_df['month'] = flood_df[date_col].dt.month_name()
+            else:
+                # if already has 'year' column, just clean it
+                flood_df['year'] = flood_df[date_col].astype(int)
 
             numeric_cols = flood_df.select_dtypes(include='number').columns
             yearly_flood = flood_df.groupby('year')[numeric_cols].mean().reset_index()
@@ -42,11 +41,12 @@ if flood_file is not None:
             fig, ax = plt.subplots(figsize=(10, 5))
             yearly_flood.plot(x='year', kind='bar', ax=ax, title='Average Flood Data per Year')
             st.pyplot(fig)
+            st.dataframe(yearly_flood)
 
     except Exception as e:
         st.error(f"Error loading Flood Dataset: {e}")
 
-# ===== WEATHER DATASET =====
+# -------------------- WEATHER DATA --------------------
 if weather_file is not None:
     try:
         if weather_file.name.endswith(".csv"):
@@ -55,19 +55,18 @@ if weather_file is not None:
             weather_df = pd.read_excel(weather_file)
         st.success("✅ Weather dataset loaded successfully!")
 
-        # Detect date/year column
+        # Auto-detect date/year column
         date_cols = [col for col in weather_df.columns if 'date' in col.lower() or 'year' in col.lower()]
         if len(date_cols) == 0:
             st.warning("⚠️ No 'year' or 'date' column detected in weather dataset.")
         else:
             date_col = date_cols[0]
-
-            if 'year' not in weather_df.columns:
+            if 'date' in date_col.lower():
                 weather_df[date_col] = pd.to_datetime(weather_df[date_col], errors='coerce')
                 weather_df['year'] = weather_df[date_col].dt.year
-
-            if 'month' not in weather_df.columns:
-                weather_df['month'] = pd.to_datetime(weather_df[date_col], errors='coerce').dt.month_name()
+                weather_df['month'] = weather_df[date_col].dt.month_name()
+            else:
+                weather_df['year'] = weather_df[date_col].astype(int)
 
             numeric_cols = weather_df.select_dtypes(include='number').columns
             yearly_weather = weather_df.groupby('year')[numeric_cols].mean().reset_index()
@@ -76,34 +75,36 @@ if weather_file is not None:
             fig, ax = plt.subplots(figsize=(10, 5))
             yearly_weather.plot(x='year', kind='bar', ax=ax, title='Average Weather Data per Year', color='orange')
             st.pyplot(fig)
+            st.dataframe(yearly_weather)
 
-            # --- Comparison (Flood vs Weather) ---
+            # --- COMPARISON CHART ---
             if flood_file is not None:
-                st.subheader("🌧️ Flood vs Weather Comparison (Rainfall-based)")
+                st.subheader("🌧️ Flood vs Weather Comparison (Rainfall vs Water Level)")
+                flood_col = None
                 rain_col = None
+
+                # Try to find columns automatically
+                for col in flood_df.columns:
+                    if 'water' in col.lower() or 'level' in col.lower():
+                        flood_col = col
+                        break
                 for col in weather_df.columns:
                     if 'rain' in col.lower():
                         rain_col = col
                         break
 
-                water_col = None
-                for col in flood_df.columns:
-                    if 'water' in col.lower() or 'flood' in col.lower():
-                        water_col = col
-                        break
-
-                if rain_col and water_col:
+                if flood_col and rain_col:
                     compare = pd.merge(
-                        yearly_flood[['year', water_col]],
+                        yearly_flood[['year', flood_col]],
                         yearly_weather[['year', rain_col]],
                         on='year',
                         how='inner'
                     )
                     fig, ax = plt.subplots(figsize=(10, 5))
-                    compare.plot(x='year', kind='bar', ax=ax, title='Yearly Flood Water Level vs Rainfall')
+                    compare.plot(x='year', kind='bar', ax=ax, title='Yearly Flood Water Level vs Rainfall', color=['blue', 'orange'])
                     st.pyplot(fig)
                     st.dataframe(compare)
                 else:
-                    st.warning("⚠️ Comparison skipped — no 'rain' or 'water level' column found.")
+                    st.warning("⚠️ Columns for rainfall or water level not found. Please check headers.")
     except Exception as e:
         st.error(f"Error loading Weather Dataset: {e}")
