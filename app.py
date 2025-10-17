@@ -113,8 +113,10 @@ if flood_file and weather_file:
             ax.grid(axis='y', linestyle='--', alpha=0.5)
             st.pyplot(fig)
 
-        # --- Summary: Most Affected Barangays Overall ---
+               # --- Summary: Most Affected Barangays Overall (Table + Graph) ---
         st.markdown("### 📊 Summary: Most Affected Barangays (Overall)")
+
+        # Compute total impact per barangay
         total_impact = (
             brgy_yearly.groupby(brgy_col)["flood_occurrences"]
             .sum()
@@ -122,10 +124,20 @@ if flood_file and weather_file:
             .sort_values(by="flood_occurrences", ascending=False)
         )
 
+        # Add ranking column
+        total_impact["Rank"] = range(1, len(total_impact) + 1)
+        total_impact = total_impact[["Rank", brgy_col, "flood_occurrences"]]
+        total_impact.rename(columns={"flood_occurrences": "Total Flood Occurrences"}, inplace=True)
+
+        # Show table
+        st.dataframe(total_impact.style.format({"Total Flood Occurrences": "{:.0f}"}))
+
+        # Graph beside it
+        st.markdown("### 📈 Bar Graph of Most Affected Barangays (Overall)")
         fig, ax = plt.subplots(figsize=(8, 4))
         ax.bar(
             total_impact[brgy_col],
-            total_impact["flood_occurrences"],
+            total_impact["Total Flood Occurrences"],
             color="salmon",
             edgecolor="black"
         )
