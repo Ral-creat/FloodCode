@@ -77,7 +77,7 @@ if flood_file and weather_file:
         ax.grid(axis='y', linestyle='--', alpha=0.5)
         with cols[i % 3]:
             st.pyplot(fig)
-          # ------------------ Barangay Affected per Year (Auto-detect affected only) ------------------
+       # ------------------ Barangay Affected per Year (Top 5 List) ------------------
     st.subheader("🏘️ Barangay Affected per Year")
 
     barangay_cols = [c for c in flood_df.columns if "barangay" in c.lower()]
@@ -92,7 +92,7 @@ if flood_file and weather_file:
             .sort_values([year_col, "flood_occurrences"], ascending=[True, False])
         )
 
-        # --- Graph per Year (only affected barangays) ---
+        # --- Graph per Year (showing affected barangays only) ---
         all_years = sorted(brgy_yearly[year_col].unique())
         for year in all_years:
             yearly_data = brgy_yearly[brgy_yearly[year_col] == year]
@@ -136,17 +136,24 @@ if flood_file and weather_file:
         ax.grid(axis='y', linestyle='--', alpha=0.5)
         st.pyplot(fig)
 
-        # --- List of Affected Barangays per Year ---
-        st.markdown("### 📋 List of Affected Barangays per Year")
+        # --- List of Top 5 Affected Barangays per Year ---
+        st.markdown("### 🏅 Top 5 Most Affected Barangays per Year")
         for year in all_years:
-            affected = brgy_yearly[
-                (brgy_yearly[year_col] == year) &
-                (brgy_yearly["flood_occurrences"] > 0)
-            ][brgy_col].tolist()
-            affected_str = ", ".join(affected) if affected else "None"
-            st.markdown(f"**{year}:** {affected_str}")
+            yearly_data = (
+                brgy_yearly[brgy_yearly[year_col] == year]
+                .sort_values("flood_occurrences", ascending=False)
+                .head(5)
+            )
+            if yearly_data.empty:
+                continue
+            top_list = [
+                f"**{row[brgy_col]}** ({int(row['flood_occurrences'])} occurrences)"
+                for _, row in yearly_data.iterrows()
+            ]
+            st.markdown(f"**{year}:** " + ", ".join(top_list))
     else:
         st.warning("⚠️ No 'Barangay' column detected in flood dataset.")
+
 
     # ------------------ Weather Visuals ------------------
     st.subheader("🌡️ Weather Summary (2014–2025)")
