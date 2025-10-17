@@ -1,7 +1,7 @@
 """
 🌊 Flood & Weather Pattern Analysis (2014–2025)
 - Upload separate datasets for Flood and Weather
-- Auto preprocess & group by year
+- Auto preprocess using month, day, year columns
 - Display yearly averages in bar graphs
 """
 
@@ -27,6 +27,26 @@ def load_data(file):
     else:
         return pd.read_excel(file)
 
+def preprocess_data(df):
+    df = df.copy()
+
+    # Normalize column names
+    df.columns = df.columns.str.lower().str.strip()
+
+    # Try to create a 'year' column if missing
+    if 'year' not in df.columns:
+        if {'month', 'day', 'year'}.issubset(df.columns):
+            # Combine to full date
+            df['date'] = pd.to_datetime(df[['year', 'month', 'day']].astype(str).agg('-'.join, axis=1), errors='coerce')
+            df['year'] = df['date'].dt.year
+        else:
+            # Try detect any column with 'date' in name
+            for col in df.columns:
+                if 'date' in col:
+                    df['year'] = pd.to_datetime(df[col], errors='coerce').dt.year
+                    break
+    return df
+
 # --- LOAD DATASETS ---
 flood_df = load_data(flood_file)
 weather_df = load_data(weather_file)
@@ -35,21 +55,10 @@ weather_df = load_data(weather_file)
 if flood_df is not None:
     st.subheader("🌊 Flood Data Analysis")
 
-    # Try detecting 'date' or 'year' column
-    if 'year' not in flood_df.columns:
-        date_col = None
-        for col in flood_df.columns:
-            if 'date' in col.lower():
-                date_col = col
-                break
-        if date_col:
-            flood_df['year'] = pd.to_datetime(flood_df[date_col], errors='coerce').dt.year
-
-    # Filter only numeric columns
+    flood_df = preprocess_data(flood_df)
     numeric_cols = flood_df.select_dtypes(include=['number']).columns
 
     if 'year' in flood_df.columns:
-        # Group by year and calculate mean
         flood_summary = (
             flood_df.groupby('year')[numeric_cols]
             .mean(numeric_only=True)
@@ -78,28 +87,17 @@ if flood_df is not None:
         plt.tight_layout()
         st.pyplot(fig)
     else:
-        st.warning("⚠️ No 'year' or 'date' column detected in flood dataset.")
+        st.warning("⚠️ Columns for month/day/year not detected in flood dataset.")
 
 
 # ==================== WEATHER DATA SECTION ====================
 if weather_df is not None:
     st.subheader("🌦️ Weather Data Analysis")
 
-    # Detect or create 'year' column
-    if 'year' not in weather_df.columns:
-        date_col = None
-        for col in weather_df.columns:
-            if 'date' in col.lower():
-                date_col = col
-                break
-        if date_col:
-            weather_df['year'] = pd.to_datetime(weather_df[date_col], errors='coerce').dt.year
-
-    # Select numeric columns
+    weather_df = preprocess_data(weather_df)
     numeric_cols = weather_df.select_dtypes(include=['number']).columns
 
     if 'year' in weather_df.columns:
-        # Compute yearly averages
         weather_summary = (
             weather_df.groupby('year')[numeric_cols]
             .mean(numeric_only=True)
@@ -128,7 +126,7 @@ if weather_df is not None:
         plt.tight_layout()
         st.pyplot(fig)
     else:
-        st.warning("⚠️ No 'year' or 'date' column detected in weather dataset.")
+        st.warning("⚠️ Columns for month/day/year not detected in weather dataset.")
 
 # ==================== END OF APP ====================
 st.markdown("---")
