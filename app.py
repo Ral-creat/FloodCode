@@ -1,10 +1,7 @@
-# ===============================================
-# Streamlit App: Flood & Weather Comparison (2014–2025)
-# ===============================================
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator  # 👈 added this
 
 st.set_page_config(page_title="Flood & Weather Comparison", layout="wide")
 
@@ -42,7 +39,6 @@ if flood_file and weather_file:
     weather_df = pd.read_excel(weather_file)
     weather_df.columns = weather_df.columns.str.strip().str.lower()
 
-    # Detect year & month columns
     w_month_col = [c for c in weather_df.columns if "month" in c][0]
     w_year_col = [c for c in weather_df.columns if "year" in c][0]
 
@@ -52,10 +48,7 @@ if flood_file and weather_file:
     weather_df[w_year_col] = weather_df[w_year_col].astype(int)
     weather_df = weather_df[weather_df[w_month_col].isin(valid_months)]
 
-    # Select numeric columns
     numeric_cols = weather_df.select_dtypes(include=['float64', 'int64']).columns.tolist()
-
-    # Average weather per year – FIXED VERSION
     weather_summary = weather_df.groupby(w_year_col, as_index=False)[numeric_cols].mean(numeric_only=True)
 
     # ------------------ Flood Visuals ------------------
@@ -75,16 +68,16 @@ if flood_file and weather_file:
         ax.set_ylabel('Occurrences')
         ax.set_xticklabels(yearly_data[month_col], rotation=45, ha='right')
         ax.grid(axis='y', linestyle='--', alpha=0.5)
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 ensures whole number y-axis
         with cols[i % 3]:
             st.pyplot(fig)
-       # ------------------ Barangay Affected per Year (Top 5 List) ------------------
+
+    # ------------------ Barangay Affected per Year (Top 5 List) ------------------
     st.subheader("🏘️ Barangay Affected per Year")
 
     barangay_cols = [c for c in flood_df.columns if "barangay" in c.lower()]
     if barangay_cols:
         brgy_col = barangay_cols[0]
-
-        # Group by year + barangay to count occurrences
         brgy_yearly = (
             flood_df.groupby([year_col, brgy_col])
             .size()
@@ -92,7 +85,6 @@ if flood_file and weather_file:
             .sort_values([year_col, "flood_occurrences"], ascending=[True, False])
         )
 
-        # --- Graph per Year (showing affected barangays only) ---
         all_years = sorted(brgy_yearly[year_col].unique())
         for year in all_years:
             yearly_data = brgy_yearly[brgy_yearly[year_col] == year]
@@ -111,80 +103,5 @@ if flood_file and weather_file:
             ax.set_title(f"Flood-Affected Barangays - {year}")
             ax.set_xticklabels(yearly_data[brgy_col], rotation=45, ha="right")
             ax.grid(axis='y', linestyle='--', alpha=0.5)
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 also fix decimals here
             st.pyplot(fig)
-
-               # --- Summary: Most Affected Barangays Overall (Table + Graph) ---
-        st.markdown("### 📊 Summary: Most Affected Barangays (Overall)")
-
-        # Compute total impact per barangay
-        total_impact = (
-            brgy_yearly.groupby(brgy_col)["flood_occurrences"]
-            .sum()
-            .reset_index()
-            .sort_values(by="flood_occurrences", ascending=False)
-        )
-
-        # Add ranking column
-        total_impact["Rank"] = range(1, len(total_impact) + 1)
-        total_impact = total_impact[["Rank", brgy_col, "flood_occurrences"]]
-        total_impact.rename(columns={"flood_occurrences": "Total Flood Occurrences"}, inplace=True)
-
-        # Show table
-        st.dataframe(total_impact.style.format({"Total Flood Occurrences": "{:.0f}"}))
-
-        # Graph beside it
-        st.markdown("### 📈 Bar Graph of Most Affected Barangays (Overall)")
-        fig, ax = plt.subplots(figsize=(8, 4))
-        ax.bar(
-            total_impact[brgy_col],
-            total_impact["Total Flood Occurrences"],
-            color="salmon",
-            edgecolor="black"
-        )
-        ax.set_xlabel("Barangay")
-        ax.set_ylabel("Total Flood Occurrences")
-        ax.set_title("Overall Flood Impact (Most Affected Barangays)")
-        ax.set_xticklabels(total_impact[brgy_col], rotation=45, ha="right")
-        ax.grid(axis='y', linestyle='--', alpha=0.5)
-        st.pyplot(fig)
-
-        # --- List of Top 5 Affected Barangays per Year ---
-        st.markdown("### 🏅 Top 5 Most Affected Barangays per Year")
-        for year in all_years:
-            yearly_data = (
-                brgy_yearly[brgy_yearly[year_col] == year]
-                .sort_values("flood_occurrences", ascending=False)
-                .head(5)
-            )
-            if yearly_data.empty:
-                continue
-            top_list = [
-                f"**{row[brgy_col]}** ({int(row['flood_occurrences'])} occurrences)"
-                for _, row in yearly_data.iterrows()
-            ]
-            st.markdown(f"**{year}:** " + ", ".join(top_list))
-    else:
-        st.warning("⚠️ No 'Barangay' column detected in flood dataset.")
-
-
-    # ------------------ Weather Visuals ------------------
-    st.subheader("🌡️ Weather Summary (2014–2025)")
-    st.dataframe(weather_summary)
-
-    # ------------------ Comparison Summary ------------------
-    st.subheader("📊 Flood vs Weather Comparison")
-    flood_summary = flood_counts.groupby(year_col)['flood_occurrences'].sum().reset_index()
-    flood_summary.rename(columns={year_col: "year"}, inplace=True)
-    weather_summary.rename(columns={w_year_col: "year"}, inplace=True)
-
-    comparison = pd.merge(flood_summary, weather_summary, on="year", how="outer").fillna(0)
-    st.dataframe(comparison)
-
-    st.write("### 🔍 Insights")
-    st.write("""
-    - **Flood Occurrences:** Total floods per year.
-    - **Weather Summary:** Average weather measurements per year.
-    - **Comparison Table:** Combines flood frequency with yearly average weather data.
-    """)
-else:
-    st.info("👆 Please upload both datasets to generate the analysis.")
