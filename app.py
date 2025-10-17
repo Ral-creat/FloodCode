@@ -1,5 +1,5 @@
 # ==============================
-# Streamlit App: Flood Occurrence Visualization (Clean Version)
+# Streamlit App: Flood Occurrence Visualization (Clean & Stable)
 # ==============================
 
 import streamlit as st
@@ -22,10 +22,10 @@ if uploaded_file is not None:
     st.write("### 🧾 Columns detected in your file:")
     st.write(list(df.columns))
 
-    # Normalize column names (lowercase + strip spaces)
+    # Normalize column names
     df.columns = df.columns.str.strip().str.lower()
 
-    # Try to detect relevant columns
+    # Detect columns
     month_col = [c for c in df.columns if "month" in c]
     year_col = [c for c in df.columns if "year" in c]
 
@@ -37,21 +37,20 @@ if uploaded_file is not None:
 
         # --- Clean Data ---
         df[month_col] = df[month_col].astype(str).str.strip().str.capitalize()
-
-        # Convert year column safely
-        df[year_col] = pd.to_numeric(df[year_col], errors='coerce')  # invalid -> NaN
-        df = df.dropna(subset=[year_col])  # drop rows where year is missing
+        df[year_col] = pd.to_numeric(df[year_col], errors='coerce')
+        df = df.dropna(subset=[year_col, month_col])  # drop rows with missing values
         df[year_col] = df[year_col].astype(int)
 
-        # --- Count Flood Occurrences ---
-        flood_counts = df.groupby([year_col, month_col]).size().reset_index(name='flood_occurrences')
-
-        # --- Sort months properly ---
-        months_order = [
+        # Remove invalid month values (numbers, blanks, etc.)
+        valid_months = [
             'January','February','March','April','May','June',
             'July','August','September','October','November','December'
         ]
-        flood_counts[month_col] = pd.Categorical(flood_counts[month_col], categories=months_order, ordered=True)
+        df = df[df[month_col].isin(valid_months)]
+
+        # --- Count Flood Occurrences ---
+        flood_counts = df.groupby([year_col, month_col]).size().reset_index(name='flood_occurrences')
+        flood_counts[month_col] = pd.Categorical(flood_counts[month_col], categories=valid_months, ordered=True)
         flood_counts = flood_counts.sort_values([year_col, month_col])
 
         # --- Visualization ---
@@ -61,13 +60,20 @@ if uploaded_file is not None:
         cols = st.columns(3)
         for i, year in enumerate(unique_years):
             yearly_data = flood_counts[flood_counts[year_col] == year]
+
+            # Skip if no data for that year
+            if yearly_data.empty:
+                continue
+
             fig, ax = plt.subplots(figsize=(5, 3))
-            ax.bar(yearly_data[month_col], yearly_data['flood_occurrences'], color='skyblue', edgecolor='black')
+            ax.bar(yearly_data[month_col].astype(str), yearly_data['flood_occurrences'],
+                   color='skyblue', edgecolor='black')
             ax.set_title(f'Flood Occurrences - {year}')
             ax.set_xlabel('Month')
             ax.set_ylabel('Occurrences')
             ax.set_xticklabels(yearly_data[month_col], rotation=45, ha='right')
             ax.grid(axis='y', linestyle='--', alpha=0.5)
+
             with cols[i % 3]:
                 st.pyplot(fig)
 else:
