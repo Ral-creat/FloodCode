@@ -57,7 +57,7 @@ if flood_file is not None:
                     .reset_index(name='flood_occurrences')
                 )
 
-                st.subheader("🏘️ Barangay Affected per Year")
+                st.subheader("🏘️ Barangay Affected per Year (Graph)")
                 fig, ax = plt.subplots(figsize=(10, 6))
                 for year in sorted(brgy_yearly['year'].unique()):
                     subset = brgy_yearly[brgy_yearly['year'] == year]
@@ -72,6 +72,15 @@ if flood_file is not None:
                 plt.xticks(rotation=90)
                 st.pyplot(fig)
                 st.dataframe(brgy_yearly)
+
+                # ---- Barangay Listing per Year ----
+                st.subheader("📋 List of Barangays Affected per Year")
+                year_groups = brgy_yearly.groupby('year')[brgy_col].unique().reset_index()
+                for _, row in year_groups.iterrows():
+                    year = row['year']
+                    barangays = ', '.join(sorted(row[brgy_col]))
+                    st.markdown(f"**🗓️ {year}:** {barangays}")
+
             else:
                 st.warning("⚠️ No 'Barangay' column detected in flood dataset.")
 
