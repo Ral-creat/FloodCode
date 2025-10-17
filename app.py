@@ -1,5 +1,5 @@
 # ==============================
-# Streamlit App: Flood Occurrence Visualization (Auto-Detect Columns)
+# Streamlit App: Flood Occurrence Visualization (Clean Version)
 # ==============================
 
 import streamlit as st
@@ -25,7 +25,7 @@ if uploaded_file is not None:
     # Normalize column names (lowercase + strip spaces)
     df.columns = df.columns.str.strip().str.lower()
 
-    # Check for possible matches
+    # Try to detect relevant columns
     month_col = [c for c in df.columns if "month" in c]
     year_col = [c for c in df.columns if "year" in c]
 
@@ -35,15 +35,22 @@ if uploaded_file is not None:
         month_col = month_col[0]
         year_col = year_col[0]
 
-        # --- Data Cleaning ---
+        # --- Clean Data ---
         df[month_col] = df[month_col].astype(str).str.strip().str.capitalize()
+
+        # Convert year column safely
+        df[year_col] = pd.to_numeric(df[year_col], errors='coerce')  # invalid -> NaN
+        df = df.dropna(subset=[year_col])  # drop rows where year is missing
         df[year_col] = df[year_col].astype(int)
 
         # --- Count Flood Occurrences ---
         flood_counts = df.groupby([year_col, month_col]).size().reset_index(name='flood_occurrences')
 
         # --- Sort months properly ---
-        months_order = ['January','February','March','April','May','June','July','August','September','October','November','December']
+        months_order = [
+            'January','February','March','April','May','June',
+            'July','August','September','October','November','December'
+        ]
         flood_counts[month_col] = pd.Categorical(flood_counts[month_col], categories=months_order, ordered=True)
         flood_counts = flood_counts.sort_values([year_col, month_col])
 
