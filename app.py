@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Flood & Weather Comparison", layout="wide")
 
 st.title("🌊☁️ Flood and Weather Data Comparison (2014–2025)")
-st.write("Upload both datasets to view per-year and per-month flood and weather visualizations.")
+st.write("Upload both datasets to view yearly and monthly flood and weather visualizations.")
 
 # Upload files
 flood_file = st.file_uploader("📂 Upload Flood Dataset (Excel)", type=["xlsx"], key="flood")
@@ -50,22 +50,15 @@ if flood_file and weather_file:
     weather_df[w_year_col] = pd.to_numeric(weather_df[w_year_col], errors='coerce')
     weather_df = weather_df.dropna(subset=[w_year_col, w_month_col])
     weather_df[w_year_col] = weather_df[w_year_col].astype(int)
-
     weather_df = weather_df[weather_df[w_month_col].isin(valid_months)]
 
-    # Get numeric columns only
+    # Select numeric columns
     numeric_cols = weather_df.select_dtypes(include=['float64', 'int64']).columns.tolist()
 
-    # Average weather data per year (avoid duplicate 'year' col issue)
-    weather_summary = (
-        weather_df.groupby(w_year_col)[numeric_cols]
-        .mean(numeric_only=True)
-        .reset_index(drop=False)
-        .rename(columns={w_year_col: "year"})
-    )
+    # Average weather per year – FIXED VERSION
+    weather_summary = weather_df.groupby(w_year_col, as_index=False)[numeric_cols].mean(numeric_only=True)
 
-    # ------------------ Visualizations ------------------
-
+    # ------------------ Flood Visuals ------------------
     st.subheader("🌧️ Flood Occurrences per Year (2014–2025)")
     cols = st.columns(3)
     unique_years = sorted(flood_counts[year_col].unique())
@@ -85,22 +78,24 @@ if flood_file and weather_file:
         with cols[i % 3]:
             st.pyplot(fig)
 
-    st.subheader("🌡️ Weather Data Summary (2014–2025)")
+    # ------------------ Weather Visuals ------------------
+    st.subheader("🌡️ Weather Summary (2014–2025)")
     st.dataframe(weather_summary)
 
-    # --- Comparison Summary ---
-    st.subheader("📊 Comparison Summary: Flood vs Weather")
+    # ------------------ Comparison Summary ------------------
+    st.subheader("📊 Flood vs Weather Comparison")
     flood_summary = flood_counts.groupby(year_col)['flood_occurrences'].sum().reset_index()
     flood_summary.rename(columns={year_col: "year"}, inplace=True)
+    weather_summary.rename(columns={w_year_col: "year"}, inplace=True)
 
     comparison = pd.merge(flood_summary, weather_summary, on="year", how="outer").fillna(0)
     st.dataframe(comparison)
 
     st.write("### 🔍 Insights")
     st.write("""
-    - **Flood Occurrences:** Shows how many flood events happened each year.
-    - **Weather Summary:** Displays average weather readings (e.g., rainfall, temperature).
-    - **Comparison Table:** Merges flood frequency and weather averages for pattern analysis.
+    - **Flood Occurrences:** Total floods per year.
+    - **Weather Summary:** Average weather measurements per year.
+    - **Comparison Table:** Combines flood frequency with yearly average weather data.
     """)
 else:
     st.info("👆 Please upload both datasets to generate the analysis.")
