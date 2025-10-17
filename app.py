@@ -72,36 +72,51 @@ if flood_file and weather_file:
         with cols[i % 3]:
             st.pyplot(fig)
 
-    # ------------------ Barangay Affected per Year (Top 5 List) ------------------
-    st.subheader("🏘️ Barangay Affected per Year")
+  # ------------------ Barangay Affected per Year (Top 5 List) ------------------
+st.subheader("🏘️ Barangay Affected per Year")
 
-    barangay_cols = [c for c in flood_df.columns if "barangay" in c.lower()]
-    if barangay_cols:
-        brgy_col = barangay_cols[0]
-        brgy_yearly = (
-            flood_df.groupby([year_col, brgy_col])
-            .size()
-            .reset_index(name="flood_occurrences")
-            .sort_values([year_col, "flood_occurrences"], ascending=[True, False])
+barangay_cols = [c for c in flood_df.columns if "barangay" in c.lower()]
+if barangay_cols:
+    brgy_col = barangay_cols[0]
+
+    # make sure no NaN barangay
+    flood_df = flood_df.dropna(subset=[brgy_col, year_col])
+
+    # group by year and barangay - count distinct flood events
+    brgy_yearly = (
+        flood_df.groupby([year_col, brgy_col])
+        .size()
+        .reset_index(name="flood_occurrences")
+        .sort_values([year_col, "flood_occurrences"], ascending=[True, False])
+    )
+
+    # show graph per year
+    all_years = sorted(brgy_yearly[year_col].unique())
+    for year in all_years:
+        yearly_data = brgy_yearly[brgy_yearly[year_col] == year]
+        if yearly_data.empty:
+            continue
+
+        # take top 5 most affected barangays per year
+        top5 = yearly_data.head(5)
+
+        st.markdown(f"### 📅 {year} - Top 5 Most Affected Barangays")
+        fig, ax = plt.subplots(figsize=(9, 4))
+        ax.bar(
+            top5[brgy_col],
+            top5["flood_occurrences"],
+            color="cornflowerblue",
+            edgecolor="black"
         )
+        ax.set_xlabel("Barangay")
+        ax.set_ylabel("Flood Occurrences")
+        ax.set_title(f"Top 5 Flood-Affected Barangays - {year}")
+        ax.set_xticklabels(top5[brgy_col], rotation=45, ha="right")
+        ax.grid(axis='y', linestyle='--', alpha=0.5)
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        st.pyplot(fig)
 
-        all_years = sorted(brgy_yearly[year_col].unique())
-        for year in all_years:
-            yearly_data = brgy_yearly[brgy_yearly[year_col] == year]
-            if yearly_data.empty:
-                continue
-            st.markdown(f"### 📅 {year} - Flood-Affected Barangays")
-            fig, ax = plt.subplots(figsize=(9, 4))
-            ax.bar(
-                yearly_data[brgy_col],
-                yearly_data["flood_occurrences"],
-                color="skyblue",
-                edgecolor="black"
-            )
-            ax.set_xlabel("Barangay")
-            ax.set_ylabel("Flood Occurrences")
-            ax.set_title(f"Flood-Affected Barangays - {year}")
-            ax.set_xticklabels(yearly_data[brgy_col], rotation=45, ha="right")
-            ax.grid(axis='y', linestyle='--', alpha=0.5)
-            ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 also fix decimals here
-            st.pyplot(fig)
+    # 🧾 Optional: summary table of all barangays + total occurrences
+    st.markdown("### 📊 Summary: All Barangays Affected Per Year")
+    summary_table = brgy_yearly.pivot(index=brgy_col, columns=year_col, values="flood_occurrences").fillna(0).astype(int)
+    st.dataframe(summary_table)
