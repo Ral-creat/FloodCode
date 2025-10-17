@@ -77,6 +77,41 @@ if flood_file and weather_file:
         ax.grid(axis='y', linestyle='--', alpha=0.5)
         with cols[i % 3]:
             st.pyplot(fig)
+            # ------------------ Barangay Affected per Year ------------------
+    st.subheader("🏘️ Barangay Affected per Year")
+
+    # Try to detect barangay column
+    barangay_cols = [c for c in flood_df.columns if "barangay" in c.lower()]
+    if barangay_cols:
+        brgy_col = barangay_cols[0]
+        # Group by year + barangay
+        brgy_yearly = flood_df.groupby([year_col, brgy_col]).size().reset_index(name="flood_occurrences")
+
+        # --- Graph per Year ---
+        for year in sorted(brgy_yearly[year_col].unique()):
+            yearly_brgy = brgy_yearly[brgy_yearly[year_col] == year]
+
+            if not yearly_brgy.empty:
+                st.markdown(f"### 📅 {year} - Flood Occurrences per Barangay")
+                fig, ax = plt.subplots(figsize=(8, 4))
+                ax.bar(yearly_brgy[brgy_col], yearly_brgy["flood_occurrences"], color="lightcoral", edgecolor="black")
+                ax.set_xlabel("Barangay")
+                ax.set_ylabel("Flood Occurrences")
+                ax.set_title(f"Barangays Affected - {year}")
+                ax.set_xticklabels(yearly_brgy[brgy_col], rotation=45, ha="right")
+                ax.grid(axis='y', linestyle='--', alpha=0.5)
+                st.pyplot(fig)
+
+        # --- List Barangays Affected per Year ---
+        st.markdown("### 📋 List of Barangays Affected per Year")
+        year_groups = brgy_yearly.groupby(year_col)[brgy_col].unique().reset_index()
+        for _, row in year_groups.iterrows():
+            year = row[year_col]
+            barangays = ", ".join(sorted(row[brgy_col]))
+            st.markdown(f"**{year}:** {barangays}")
+    else:
+        st.warning("⚠️ No 'Barangay' column detected in flood dataset.")
+
 
     # ------------------ Weather Visuals ------------------
     st.subheader("🌡️ Weather Summary (2014–2025)")
