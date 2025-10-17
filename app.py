@@ -105,11 +105,11 @@ if flood_file and weather_file:
             ax.grid(axis='y', linestyle='--', alpha=0.5)
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 also fix decimals here
             st.pyplot(fig)
-            # ------------------ 🌦️ WEATHER DATA VISUALIZATION (Last Section) ------------------
+        # ------------------ 🌦️ WEATHER DATA VISUALIZATION (Last Section) ------------------
     st.markdown("---")
     st.subheader("🌤️ Weather Data Summary (2014–2025)")
 
-    # Load and clean weather data again safely
+    # Load and clean weather data safely
     weather_df = pd.read_excel(weather_file)
     weather_df.columns = weather_df.columns.str.strip().str.lower()
 
@@ -126,23 +126,26 @@ if flood_file and weather_file:
     rainfall_cols = [c for c in weather_df.columns if "rain" in c.lower()]
     temp_cols = [c for c in weather_df.columns if "temp" in c.lower() or "temperature" in c.lower()]
 
-    # If no rainfall/temp columns found, pick numeric columns as fallback
+    # Keep only numeric columns for processing
     numeric_cols = weather_df.select_dtypes(include=["number"]).columns.tolist()
+
+    # Fallback handling
     if not rainfall_cols and numeric_cols:
         rainfall_cols = [numeric_cols[0]]
     if not temp_cols and len(numeric_cols) > 1:
         temp_cols = [numeric_cols[1]]
 
-    # Group by Year & Month
+    # Build aggregation dict only for numeric columns
     agg_dict = {}
     for col in rainfall_cols + temp_cols:
-        if col in weather_df.columns:
-            agg_dict[col] = 'mean'
+        if col in numeric_cols:  # ✅ ensures we only use numeric columns
+            agg_dict[col] = "mean"
 
     if not agg_dict:
         st.warning("⚠️ No numeric weather columns (rainfall or temperature) found in the uploaded file.")
         weather_summary = pd.DataFrame(columns=[w_year_col, w_month_col])
     else:
+        # Group by year and month for monthly averages
         weather_summary = (
             weather_df.groupby([w_year_col, w_month_col])
             .agg(agg_dict)
@@ -164,7 +167,7 @@ if flood_file and weather_file:
             yearly_data = weather_summary[weather_summary[w_year_col] == year]
             fig, ax1 = plt.subplots(figsize=(7, 4))
             ax1.set_title(f"Rainfall & Temperature - {year}")
-            
+
             # Plot rainfall
             if rainfall_cols:
                 ax1.bar(yearly_data[w_month_col], yearly_data[rainfall_cols[0]],
@@ -172,7 +175,7 @@ if flood_file and weather_file:
                 ax1.set_ylabel("Rainfall (mm)", color='blue')
                 ax1.tick_params(axis='y', labelcolor='blue')
 
-            # Add temperature on secondary axis
+            # Plot temperature on secondary axis
             if temp_cols:
                 ax2 = ax1.twinx()
                 ax2.plot(yearly_data[w_month_col], yearly_data[temp_cols[0]],
@@ -191,17 +194,18 @@ if flood_file and weather_file:
         # ================= YEARLY WEATHER SUMMARY =================
         st.subheader("🌧️ Average Rainfall and Temperature per Year")
 
+        # Only aggregate numeric columns again safely
         yearly_weather = (
-            weather_df.groupby(w_year_col)
-            .agg(agg_dict)
+            weather_df.groupby(w_year_col)[numeric_cols]
+            .mean(numeric_only=True)
             .reset_index()
         )
 
         fig, ax = plt.subplots(figsize=(8, 4))
-        if rainfall_cols:
+        if rainfall_cols and rainfall_cols[0] in yearly_weather.columns:
             ax.bar(yearly_weather[w_year_col], yearly_weather[rainfall_cols[0]],
                    color='cornflowerblue', label='Avg Rainfall (mm)')
-        if temp_cols:
+        if temp_cols and temp_cols[0] in yearly_weather.columns:
             ax.plot(yearly_weather[w_year_col], yearly_weather[temp_cols[0]],
                     color='darkred', marker='o', label='Avg Temperature (°C)')
 
@@ -212,3 +216,4 @@ if flood_file and weather_file:
         st.pyplot(fig)
     else:
         st.info("No valid weather data available to visualize.")
+
