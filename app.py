@@ -105,7 +105,7 @@ if flood_file and weather_file:
             ax.grid(axis='y', linestyle='--', alpha=0.5)
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 also fix decimals here
             st.pyplot(fig)
-      # ------------------ 🌦️ WEATHER DATA VISUALIZATION (Last Section) ------------------
+     # ------------------ 🌦️ WEATHER DATA VISUALIZATION (Last Section) ------------------
     st.markdown("---")
     st.subheader("🌤️ Weather Data Summary (2014–2025)")
 
@@ -219,8 +219,3 @@ if flood_file and weather_file:
         st.pyplot(fig)
     else:
         st.info("No valid weather data available to visualize.")
-
-        st.pyplot(fig)
-    else:
-        st.info("No valid weather data available to visualize.")
-
