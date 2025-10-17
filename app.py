@@ -77,7 +77,7 @@ if flood_file and weather_file:
         ax.grid(axis='y', linestyle='--', alpha=0.5)
         with cols[i % 3]:
             st.pyplot(fig)
-    # ------------------ Barangay Affected per Year ------------------
+       # ------------------ Barangay Affected per Year (Fixed Version) ------------------
     st.subheader("🏘️ Barangay Affected per Year")
 
     # Detect barangay column automatically
@@ -85,33 +85,46 @@ if flood_file and weather_file:
     if barangay_cols:
         brgy_col = barangay_cols[0]
 
+        # All possible barangays (based on your dataset)
+        all_barangays = [
+            "Bunawan Brook", "Libertad", "Imelda", "Poblacion", "Nueva Era",
+            "Mambalili", "San Teodoro", "San Andres", "Consuelo", "San Marcos"
+        ]
+
         # Group by year + barangay to count occurrences
         brgy_yearly = flood_df.groupby([year_col, brgy_col]).size().reset_index(name="flood_occurrences")
 
-        # --- Graph per Year (only affected barangays) ---
-        for year in sorted(brgy_yearly[year_col].unique()):
-            yearly_brgy = brgy_yearly[brgy_yearly[year_col] == year]
-            yearly_brgy = yearly_brgy[yearly_brgy["flood_occurrences"] > 0]  # show only affected
+        # Ensure all barangays exist each year (fill missing with 0)
+        all_years = sorted(flood_df[year_col].unique())
+        complete_data = []
+        for y in all_years:
+            for b in all_barangays:
+                val = brgy_yearly[
+                    (brgy_yearly[year_col] == y) &
+                    (brgy_yearly[brgy_col].str.lower() == b.lower())
+                ]["flood_occurrences"]
+                count = int(val.iloc[0]) if not val.empty else 0
+                complete_data.append({year_col: y, brgy_col: b, "flood_occurrences": count})
+        brgy_complete_df = pd.DataFrame(complete_data)
 
-            if not yearly_brgy.empty:
-                st.markdown(f"### 📅 {year} - Flood Occurrences per Barangay")
-                fig, ax = plt.subplots(figsize=(9, 4))
-                ax.bar(yearly_brgy[brgy_col], yearly_brgy["flood_occurrences"],
-                       color="skyblue", edgecolor="black")
-                ax.set_xlabel("Barangay")
-                ax.set_ylabel("Flood Occurrences")
-                ax.set_title(f"Flood-Affected Barangays - {year}")
-                ax.set_xticklabels(yearly_brgy[brgy_col], rotation=45, ha="right")
-                ax.grid(axis='y', linestyle='--', alpha=0.5)
-                st.pyplot(fig)
-            else:
-                st.markdown(f"**{year}:** No barangays affected.")
+        # --- Graph per Year (showing all barangays) ---
+        for year in all_years:
+            yearly_data = brgy_complete_df[brgy_complete_df[year_col] == year]
+            st.markdown(f"### 📅 {year} - Flood Occurrences per Barangay")
+            fig, ax = plt.subplots(figsize=(9, 4))
+            ax.bar(yearly_data[brgy_col], yearly_data["flood_occurrences"],
+                   color="skyblue", edgecolor="black")
+            ax.set_xlabel("Barangay")
+            ax.set_ylabel("Flood Occurrences")
+            ax.set_title(f"Flood-Affected Barangays - {year}")
+            ax.set_xticklabels(yearly_data[brgy_col], rotation=45, ha="right")
+            ax.grid(axis='y', linestyle='--', alpha=0.5)
+            st.pyplot(fig)
 
         # --- Summary: Most Affected Barangays Overall ---
         st.markdown("### 📊 Summary: Most Affected Barangays (Overall)")
-
         total_impact = (
-            brgy_yearly.groupby(brgy_col)["flood_occurrences"]
+            brgy_complete_df.groupby(brgy_col)["flood_occurrences"]
             .sum()
             .reset_index()
             .sort_values(by="flood_occurrences", ascending=False)
@@ -129,11 +142,13 @@ if flood_file and weather_file:
 
         # --- List of Affected Barangays per Year ---
         st.markdown("### 📋 List of Affected Barangays per Year")
-        year_groups = brgy_yearly.groupby(year_col)[brgy_col].unique().reset_index()
-        for _, row in year_groups.iterrows():
-            year = row[year_col]
-            barangays = ", ".join(sorted(row[brgy_col]))
-            st.markdown(f"**{year}:** {barangays}")
+        for year in all_years:
+            affected = brgy_complete_df[
+                (brgy_complete_df[year_col] == year) &
+                (brgy_complete_df["flood_occurrences"] > 0)
+            ][brgy_col].tolist()
+            affected_str = ", ".join(affected) if affected else "None"
+            st.markdown(f"**{year}:** {affected_str}")
     else:
         st.warning("⚠️ No 'Barangay' column detected in flood dataset.")
 
