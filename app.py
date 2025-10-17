@@ -140,8 +140,13 @@ if flood_file and weather_file:
         st.markdown("### 📋 List of Affected Barangays per Year")
         for year in all_years:
             affected = brgy_yearly[
-                (brgy_yearly[year_col] == year) &_]()_
-
+                (brgy_yearly[year_col] == year) &
+                (brgy_yearly["flood_occurrences"] > 0)
+            ][brgy_col].tolist()
+            affected_str = ", ".join(affected) if affected else "None"
+            st.markdown(f"**{year}:** {affected_str}")
+    else:
+        st.warning("⚠️ No 'Barangay' column detected in flood dataset.")
 
     # ------------------ Weather Visuals ------------------
     st.subheader("🌡️ Weather Summary (2014–2025)")
