@@ -105,3 +105,20 @@ if flood_file and weather_file:
             ax.grid(axis='y', linestyle='--', alpha=0.5)
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 also fix decimals here
             st.pyplot(fig)
+             # ------------------ Weather Summary per Year ------------------
+    st.subheader("🌦️ Average Rainfall and Temperature per Year")
+
+    yearly_weather = weather_df.groupby(w_year_col).agg({
+        **{col: 'mean' for col in rainfall_cols + temp_cols}
+    }).reset_index()
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    if rainfall_cols:
+        ax.bar(yearly_weather[w_year_col], yearly_weather[rainfall_cols[0]], color='cornflowerblue', label='Avg Rainfall (mm)')
+    if temp_cols:
+        ax.plot(yearly_weather[w_year_col], yearly_weather[temp_cols[0]], color='darkred', marker='o', label='Avg Temperature (°C)')
+    ax.set_xlabel("Year")
+    ax.set_ylabel("Rainfall / Temperature")
+    ax.set_title("Yearly Average Rainfall and Temperature (2014–2025)")
+    ax.legend()
+    st.pyplot(fig)
