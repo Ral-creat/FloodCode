@@ -105,56 +105,73 @@ if flood_file and weather_file:
             ax.grid(axis='y', linestyle='--', alpha=0.5)
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 also fix decimals here
             st.pyplot(fig)
-# ------------------ 🌦️ WEATHER DATA VISUALIZATION (PER FLOOD OCCURRENCE) ------------------
+# ------------------ 🌧️ WEATHER DATA VISUALIZATION (2014–2025) ------------------
 st.markdown("---")
-st.subheader("🌧️ Weather Data per Flood Occurrence")
+st.subheader("🌦️ Daily Weather Data per Year (2014–2025)")
 
-# Load and clean weather data
+# Load and clean dataset
 weather_df = pd.read_excel(weather_file)
 weather_df.columns = weather_df.columns.str.strip().str.lower()
 
-# Combine Year, Month, Day into a proper Date
-weather_df['date'] = pd.to_datetime(
-    weather_df[['year', 'month', 'day']], errors='coerce'
-)
-weather_df = weather_df.dropna(subset=['date'])
+# Rename key columns for consistency
+rename_map = {
+    'temperature(°c)': 'temperature',
+    'rainfall (mm)': 'rainfall',
+}
+weather_df = weather_df.rename(columns=rename_map)
 
 # Convert numeric columns
-weather_df['temperature(°c)'] = pd.to_numeric(weather_df['temperature(°c)'], errors='coerce')
-weather_df['rainfall (mm)'] = pd.to_numeric(weather_df['rainfall (mm)'], errors='coerce')
+for col in ['year', 'month', 'day']:
+    weather_df[col] = pd.to_numeric(weather_df[col], errors='coerce')
+weather_df['temperature'] = pd.to_numeric(weather_df['temperature'], errors='coerce')
+weather_df['rainfall'] = pd.to_numeric(weather_df['rainfall'], errors='coerce')
 
-# List of flood years (customize as needed)
-flood_years = [2010, 2012, 2016, 2019, 2022]
+# Drop invalid rows
+weather_df = weather_df.dropna(subset=['year', 'month', 'day'])
+weather_df['year'] = weather_df['year'].astype(int)
 
-for year in flood_years:
-    year_data = weather_df[weather_df['year'] == year]
-    if year_data.empty:
-        st.warning(f"No weather data available for {year}.")
-        continue
+# Create a proper date column
+weather_df['date'] = pd.to_datetime(weather_df[['year', 'month', 'day']], errors='coerce')
+weather_df = weather_df.dropna(subset=['date'])
+weather_df = weather_df.sort_values('date')
 
-    st.markdown(f"### 🌊 Flood Year: {year}")
+# Detect available years automatically
+available_years = sorted(weather_df['year'].unique().tolist())
 
-    # ====== RAINFALL GRAPH ======
-    fig1, ax1 = plt.subplots(figsize=(8, 4))
-    ax1.plot(year_data['date'], year_data['rainfall (mm)'],
-             color='royalblue', marker='o', linewidth=2)
-    ax1.set_title(f"Daily Rainfall in {year}")
-    ax1.set_xlabel("Date")
-    ax1.set_ylabel("Rainfall (mm)")
-    ax1.grid(True, linestyle='--', alpha=0.6)
-    plt.xticks(rotation=45)
-    st.pyplot(fig1)
+if not available_years:
+    st.warning("⚠️ No valid year data found in your dataset.")
+else:
+    for year in available_years:
+        yearly_data = weather_df[weather_df['year'] == year]
 
-    # ====== TEMPERATURE GRAPH ======
-    fig2, ax2 = plt.subplots(figsize=(8, 4))
-    ax2.plot(year_data['date'], year_data['temperature(°c)'],
-             color='darkred', marker='o', linewidth=2)
-    ax2.set_title(f"Daily Temperature in {year}")
-    ax2.set_xlabel("Date")
-    ax2.set_ylabel("Temperature (°C)")
-    ax2.grid(True, linestyle='--', alpha=0.6)
-    plt.xticks(rotation=45)
-    st.pyplot(fig2)
+        if yearly_data.empty:
+            st.info(f"No data available for {year}.")
+            continue
 
-st.info("✅ Each graph shows daily rainfall and temperature per flood occurrence year.")
+        st.markdown(f"## 📅 Weather Trends for {year}")
+
+        # --- Rainfall Plot ---
+        fig_rain, ax_rain = plt.subplots(figsize=(10, 4))
+        ax_rain.plot(yearly_data['date'], yearly_data['rainfall'],
+                     color='royalblue', marker='o', linewidth=1.8)
+        ax_rain.set_title(f"🌧️ Daily Rainfall - {year}")
+        ax_rain.set_xlabel("Date")
+        ax_rain.set_ylabel("Rainfall (mm)")
+        ax_rain.grid(True, linestyle='--', alpha=0.5)
+        plt.xticks(rotation=45)
+        st.pyplot(fig_rain)
+
+        # --- Temperature Plot ---
+        fig_temp, ax_temp = plt.subplots(figsize=(10, 4))
+        ax_temp.plot(yearly_data['date'], yearly_data['temperature'],
+                     color='darkred', marker='o', linewidth=1.8)
+        ax_temp.set_title(f"🌡️ Daily Temperature - {year}")
+        ax_temp.set_xlabel("Date")
+        ax_temp.set_ylabel("Temperature (°C)")
+        ax_temp.grid(True, linestyle='--', alpha=0.5)
+        plt.xticks(rotation=45)
+        st.pyplot(fig_temp)
+
+st.info("✅ This section shows daily rainfall and temperature data from 2014 to 2025.")
+
 
