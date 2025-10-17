@@ -1,125 +1,106 @@
+# ===============================================
+# Streamlit App: Flood & Weather Comparison (2014–2025)
+# ===============================================
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Flood & Weather Yearly Analysis", layout="wide")
+st.set_page_config(page_title="Flood & Weather Comparison", layout="wide")
 
-st.title("🌊 Flood and Weather Data Comparison (2014–2025)")
+st.title("🌊☁️ Flood and Weather Data Comparison (2014–2025)")
+st.write("Upload both datasets to view per-year and per-month flood and weather visualizations.")
 
-# --- File uploaders ---
-st.sidebar.header("📂 Upload Datasets")
-flood_file = st.sidebar.file_uploader("Upload Flood Dataset (CSV/XLSX)", type=["csv", "xlsx"])
-weather_file = st.sidebar.file_uploader("Upload Weather Dataset (CSV/XLSX)", type=["csv", "xlsx"])
+# Upload files
+flood_file = st.file_uploader("📂 Upload Flood Dataset (Excel)", type=["xlsx"], key="flood")
+weather_file = st.file_uploader("🌦️ Upload Weather Dataset (Excel)", type=["xlsx"], key="weather")
 
 if flood_file and weather_file:
-    # --- Load data ---
-    if flood_file.name.endswith(".csv"):
-        flood_df = pd.read_csv(flood_file)
-    else:
-        flood_df = pd.read_excel(flood_file)
-
-    if weather_file.name.endswith(".csv"):
-        weather_df = pd.read_csv(weather_file)
-    else:
-        weather_df = pd.read_excel(weather_file)
-
-    # --- Clean Flood Data ---
+    # ------------------ Load & Clean Flood Data ------------------
+    flood_df = pd.read_excel(flood_file)
     flood_df.columns = flood_df.columns.str.strip().str.lower()
-    if 'year' not in flood_df.columns:
-        st.error("⚠️ Flood dataset must have a 'year' column.")
-        st.stop()
-    flood_df['year'] = pd.to_numeric(flood_df['year'], errors='coerce')
-    flood_df = flood_df.dropna(subset=['year'])
-    flood_df['year'] = flood_df['year'].astype(int)
 
-    if 'month' in flood_df.columns:
-        flood_df['month'] = flood_df['month'].astype(str).str.strip().str.capitalize()
+    month_col = [c for c in flood_df.columns if "month" in c][0]
+    year_col = [c for c in flood_df.columns if "year" in c][0]
 
-    # Count flood occurrences per year
-    flood_summary = flood_df.groupby('year').size().reset_index(name='flood_occurrences')
+    flood_df[month_col] = flood_df[month_col].astype(str).str.strip().str.capitalize()
+    flood_df[year_col] = pd.to_numeric(flood_df[year_col], errors='coerce')
+    flood_df = flood_df.dropna(subset=[year_col, month_col])
+    flood_df[year_col] = flood_df[year_col].astype(int)
 
-    # --- Clean Weather Data ---
+    valid_months = [
+        'January','February','March','April','May','June',
+        'July','August','September','October','November','December'
+    ]
+    flood_df = flood_df[flood_df[month_col].isin(valid_months)]
+
+    flood_counts = flood_df.groupby([year_col, month_col]).size().reset_index(name='flood_occurrences')
+    flood_counts[month_col] = pd.Categorical(flood_counts[month_col], categories=valid_months, ordered=True)
+    flood_counts = flood_counts.sort_values([year_col, month_col])
+
+    # ------------------ Load & Clean Weather Data ------------------
+    weather_df = pd.read_excel(weather_file)
     weather_df.columns = weather_df.columns.str.strip().str.lower()
-    if 'year' not in weather_df.columns:
-        st.error("⚠️ Weather dataset must have a 'year' column.")
-        st.stop()
-    weather_df['year'] = pd.to_numeric(weather_df['year'], errors='coerce')
-    weather_df = weather_df.dropna(subset=['year'])
-    weather_df['year'] = weather_df['year'].astype(int)
 
-    if 'month' in weather_df.columns:
-        weather_df['month'] = weather_df['month'].astype(str).str.strip().str.capitalize()
+    # Detect year & month columns
+    w_month_col = [c for c in weather_df.columns if "month" in c][0]
+    w_year_col = [c for c in weather_df.columns if "year" in c][0]
 
-    # Example: Average rainfall (mm) or temperature per year
-    numeric_cols = weather_df.select_dtypes(include='number').columns
-    if len(numeric_cols) > 0:
-        weather_summary = weather_df.groupby('year')[numeric_cols].mean().reset_index()
-    else:
-        st.warning("⚠️ Weather dataset has no numeric columns to summarize.")
-        weather_summary = pd.DataFrame({'year': [], 'rainfall': []})
+    weather_df[w_month_col] = weather_df[w_month_col].astype(str).str.strip().str.capitalize()
+    weather_df[w_year_col] = pd.to_numeric(weather_df[w_year_col], errors='coerce')
+    weather_df = weather_df.dropna(subset=[w_year_col, w_month_col])
+    weather_df[w_year_col] = weather_df[w_year_col].astype(int)
 
-    # --- Merge the summaries ---
-    comparison_df = pd.merge(flood_summary, weather_summary, on='year', how='outer').sort_values('year')
+    weather_df = weather_df[weather_df[w_month_col].isin(valid_months)]
 
-    # --- Visualization: Yearly Bar Graphs ---
-    st.subheader("📊 Yearly Flood and Weather Summary (2014–2025)")
-    fig, ax1 = plt.subplots(figsize=(10, 6))
+    # Get numeric columns only
+    numeric_cols = weather_df.select_dtypes(include=['float64', 'int64']).columns.tolist()
 
-    ax1.bar(comparison_df['year'], comparison_df['flood_occurrences'], color='skyblue', label='Flood Occurrences')
-    ax1.set_ylabel("Flood Occurrences", color='blue')
-    ax1.set_xlabel("Year")
+    # Average weather data per year (avoid duplicate 'year' col issue)
+    weather_summary = (
+        weather_df.groupby(w_year_col)[numeric_cols]
+        .mean(numeric_only=True)
+        .reset_index(drop=False)
+        .rename(columns={w_year_col: "year"})
+    )
 
-    # Add rainfall/temperature on secondary axis if available
-    if 'rainfall' in weather_summary.columns:
-        ax2 = ax1.twinx()
-        ax2.plot(comparison_df['year'], comparison_df['rainfall'], color='orange', marker='o', label='Avg Rainfall')
-        ax2.set_ylabel("Average Rainfall (mm)", color='orange')
-    elif len(numeric_cols) > 0:
-        col_name = numeric_cols[0]
-        ax2 = ax1.twinx()
-        ax2.plot(comparison_df['year'], comparison_df[col_name], color='orange', marker='o', label=f'Avg {col_name.capitalize()}')
-        ax2.set_ylabel(f"Average {col_name.capitalize()}", color='orange')
+    # ------------------ Visualizations ------------------
 
-    plt.title("Flood vs Weather Trends (2014–2025)")
-    fig.tight_layout()
-    st.pyplot(fig)
+    st.subheader("🌧️ Flood Occurrences per Year (2014–2025)")
+    cols = st.columns(3)
+    unique_years = sorted(flood_counts[year_col].unique())
 
-    # --- Monthly Comparison ---
-    if 'month' in flood_df.columns and 'month' in weather_df.columns:
-        st.subheader("📅 Monthly Average Comparison per Year")
+    for i, year in enumerate(unique_years):
+        yearly_data = flood_counts[flood_counts[year_col] == year]
+        if yearly_data.empty:
+            continue
+        fig, ax = plt.subplots(figsize=(5,3))
+        ax.bar(yearly_data[month_col], yearly_data['flood_occurrences'],
+               color='skyblue', edgecolor='black')
+        ax.set_title(f'Flood Occurrences - {year}')
+        ax.set_xlabel('Month')
+        ax.set_ylabel('Occurrences')
+        ax.set_xticklabels(yearly_data[month_col], rotation=45, ha='right')
+        ax.grid(axis='y', linestyle='--', alpha=0.5)
+        with cols[i % 3]:
+            st.pyplot(fig)
 
-        for year in sorted(flood_df['year'].unique()):
-            flood_monthly = flood_df[flood_df['year'] == year].groupby('month').size().reindex(
-                ['January','February','March','April','May','June','July','August','September','October','November','December']
-            ).fillna(0)
+    st.subheader("🌡️ Weather Data Summary (2014–2025)")
+    st.dataframe(weather_summary)
 
-            if len(numeric_cols) > 0:
-                weather_monthly = weather_df[weather_df['year'] == year].groupby('month')[numeric_cols[0]].mean().reindex(
-                    ['January','February','March','April','May','June','July','August','September','October','November','December']
-                ).fillna(0)
+    # --- Comparison Summary ---
+    st.subheader("📊 Comparison Summary: Flood vs Weather")
+    flood_summary = flood_counts.groupby(year_col)['flood_occurrences'].sum().reset_index()
+    flood_summary.rename(columns={year_col: "year"}, inplace=True)
 
-                fig, ax1 = plt.subplots(figsize=(10, 4))
-                ax1.bar(flood_monthly.index, flood_monthly.values, color='skyblue', label='Floods')
-                ax1.set_ylabel("Flood Occurrences", color='blue')
-                ax1.set_xticklabels(flood_monthly.index, rotation=45, ha='right')
+    comparison = pd.merge(flood_summary, weather_summary, on="year", how="outer").fillna(0)
+    st.dataframe(comparison)
 
-                ax2 = ax1.twinx()
-                ax2.plot(weather_monthly.index, weather_monthly.values, color='orange', marker='o', label=f"Avg {numeric_cols[0].capitalize()}")
-                ax2.set_ylabel(f"Avg {numeric_cols[0].capitalize()}", color='orange')
-
-                plt.title(f"{year} Monthly Comparison")
-                fig.tight_layout()
-                st.pyplot(fig)
-
-    # --- Summary ---
-    st.subheader("🧾 Comparison Summary")
+    st.write("### 🔍 Insights")
     st.write("""
-    - The blue bars represent **flood occurrences** per year.
-    - The orange line shows **average weather metrics** (e.g., rainfall or temperature).
-    - Use these visuals to see patterns — like how increased rainfall affects flood frequency.
+    - **Flood Occurrences:** Shows how many flood events happened each year.
+    - **Weather Summary:** Displays average weather readings (e.g., rainfall, temperature).
+    - **Comparison Table:** Merges flood frequency and weather averages for pattern analysis.
     """)
-
-    st.dataframe(comparison_df)
-
 else:
-    st.info("⬆️ Upload both the Flood and Weather datasets to start the analysis.")
+    st.info("👆 Please upload both datasets to generate the analysis.")
