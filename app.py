@@ -105,76 +105,56 @@ if flood_file and weather_file:
             ax.grid(axis='y', linestyle='--', alpha=0.5)
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 also fix decimals here
             st.pyplot(fig)
-# ------------------ 🌦️ WEATHER DATA VISUALIZATION (Daily) ------------------
+# ------------------ 🌦️ WEATHER DATA VISUALIZATION (PER FLOOD OCCURRENCE) ------------------
 st.markdown("---")
-st.subheader("🌤️ Daily Weather Data Summary (2014–2025)")
+st.subheader("🌧️ Weather Data per Flood Occurrence")
 
-# Load Excel
+# Load and clean weather data
 weather_df = pd.read_excel(weather_file)
 weather_df.columns = weather_df.columns.str.strip().str.lower()
 
-# Detect possible date/day/year columns
-date_cols = [c for c in weather_df.columns if "date" in c or "day" in c]
-year_cols = [c for c in weather_df.columns if "year" in c]
+# Combine Year, Month, Day into a proper Date
+weather_df['date'] = pd.to_datetime(
+    weather_df[['year', 'month', 'day']], errors='coerce'
+)
+weather_df = weather_df.dropna(subset=['date'])
 
-if date_cols:
-    date_col = date_cols[0]
-    weather_df[date_col] = pd.to_datetime(weather_df[date_col], errors="coerce")
-else:
-    st.error("⚠️ No date or day column found. Please include one in your Excel file.")
-    st.stop()
+# Convert numeric columns
+weather_df['temperature(°c)'] = pd.to_numeric(weather_df['temperature(°c)'], errors='coerce')
+weather_df['rainfall (mm)'] = pd.to_numeric(weather_df['rainfall (mm)'], errors='coerce')
 
-# Detect numeric rainfall and temperature columns
-rainfall_cols = [c for c in weather_df.columns if any(k in c for k in ["rain", "precip", "mm"])]
-temp_cols = [c for c in weather_df.columns if any(k in c for k in ["temp", "°c", "temperature"])]
+# List of flood years (customize as needed)
+flood_years = [2010, 2012, 2016, 2019, 2022]
 
-for col in rainfall_cols + temp_cols:
-    weather_df[col] = pd.to_numeric(weather_df[col], errors="coerce")
+for year in flood_years:
+    year_data = weather_df[weather_df['year'] == year]
+    if year_data.empty:
+        st.warning(f"No weather data available for {year}.")
+        continue
 
-if not rainfall_cols and not temp_cols:
-    st.warning("⚠️ No rainfall or temperature columns detected. Please verify Excel headers.")
-    st.write("📋 Available columns:", weather_df.columns.tolist())
-    st.stop()
+    st.markdown(f"### 🌊 Flood Year: {year}")
 
-# Clean dataframe
-weather_df = weather_df.dropna(subset=[date_col])
-weather_df = weather_df.sort_values(by=date_col)
+    # ====== RAINFALL GRAPH ======
+    fig1, ax1 = plt.subplots(figsize=(8, 4))
+    ax1.plot(year_data['date'], year_data['rainfall (mm)'],
+             color='royalblue', marker='o', linewidth=2)
+    ax1.set_title(f"Daily Rainfall in {year}")
+    ax1.set_xlabel("Date")
+    ax1.set_ylabel("Rainfall (mm)")
+    ax1.grid(True, linestyle='--', alpha=0.6)
+    plt.xticks(rotation=45)
+    st.pyplot(fig1)
 
-# ========== 📈 DAILY RAINFALL GRAPH ==========
-if rainfall_cols:
-    st.subheader("🌧️ Daily Rainfall (mm)")
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(weather_df[date_col], weather_df[rainfall_cols[0]],
-            color='royalblue', marker='', linewidth=1.5)
-    ax.set_title("Daily Rainfall Over Time")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Rainfall (mm)")
-    ax.grid(True, linestyle='--', alpha=0.5)
-    st.pyplot(fig)
+    # ====== TEMPERATURE GRAPH ======
+    fig2, ax2 = plt.subplots(figsize=(8, 4))
+    ax2.plot(year_data['date'], year_data['temperature(°c)'],
+             color='darkred', marker='o', linewidth=2)
+    ax2.set_title(f"Daily Temperature in {year}")
+    ax2.set_xlabel("Date")
+    ax2.set_ylabel("Temperature (°C)")
+    ax2.grid(True, linestyle='--', alpha=0.6)
+    plt.xticks(rotation=45)
+    st.pyplot(fig2)
 
-# ========== 🌡️ DAILY TEMPERATURE GRAPH ==========
-if temp_cols:
-    st.subheader("🌡️ Daily Temperature (°C)")
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(weather_df[date_col], weather_df[temp_cols[0]],
-            color='darkred', marker='', linewidth=1.5)
-    ax.set_title("Daily Temperature Over Time")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Temperature (°C)")
-    ax.grid(True, linestyle='--', alpha=0.5)
-    st.pyplot(fig)
-
-# ========== 📊 SUMMARY STATS ==========
-st.subheader("📋 Weather Summary Statistics")
-
-summary_data = {
-    "Average Rainfall (mm)": weather_df[rainfall_cols[0]].mean() if rainfall_cols else None,
-    "Max Rainfall (mm)": weather_df[rainfall_cols[0]].max() if rainfall_cols else None,
-    "Average Temperature (°C)": weather_df[temp_cols[0]].mean() if temp_cols else None,
-    "Max Temperature (°C)": weather_df[temp_cols[0]].max() if temp_cols else None
-}
-
-summary_df = pd.DataFrame(summary_data, index=["Values"])
-st.dataframe(summary_df.T)
-
+st.info("✅ Each graph shows daily rainfall and temperature per flood occurrence year.")
 
