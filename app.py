@@ -105,7 +105,7 @@ if flood_file and weather_file:
             ax.grid(axis='y', linestyle='--', alpha=0.5)
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 also fix decimals here
             st.pyplot(fig)
-  # ------------------ 🌦️ WEATHER DATA VISUALIZATION (Last Section) ------------------
+# ------------------ 🌦️ WEATHER DATA VISUALIZATION (Last Section) ------------------
 st.markdown("---")
 st.subheader("🌤️ Weather Data Summary (2014–2025)")
 
@@ -151,6 +151,7 @@ for col in rainfall_cols + temp_cols:
         else:
             agg_dict[col] = "mean"
 
+# Create summary
 if not agg_dict:
     st.warning("⚠️ Still no numeric rainfall or temperature columns found. Please verify column names.")
     st.write("📋 Available columns:", weather_df.columns.tolist())
@@ -206,9 +207,10 @@ if not weather_summary.empty:
     # ========== YEARLY SUMMARY ==========
     st.subheader("🌧️ Average Rainfall and Temperature per Year")
 
+    # Summarize correctly
     yearly_weather = (
-        weather_df.groupby(w_year_col)[rainfall_cols + temp_cols]
-        .agg({'rainfall(mm)': 'sum', 'temperature(°c)': 'mean'} if 'rainfall(mm)' in rainfall_cols and 'temperature(°c)' in temp_cols else 'mean')
+        weather_df.groupby(w_year_col)
+        .agg({rainfall_cols[0]: "sum", temp_cols[0]: "mean"})
         .reset_index()
     )
 
@@ -229,6 +231,4 @@ if not weather_summary.empty:
 else:
     st.info("⚠️ No valid weather data available to visualize.")
 
-    else:
-        st.info("No valid weather data available to visualize.")
 
