@@ -1,14 +1,85 @@
 import streamlit as st
-import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator  # 👈 added this
+from matplotlib.ticker import MaxNLocator
+import pandas as pd
 
 st.set_page_config(page_title="Flood & Weather Comparison", layout="wide")
 
+# ------------------ 🌈 CSS Styling ------------------
+st.markdown("""
+<style>
+/* General page background */
+[data-testid="stAppViewContainer"] {
+    background: linear-gradient(135deg, #f0f7ff 0%, #ffffff 100%);
+}
+
+/* Titles and subheaders */
+h1, h2, h3, h4 {
+    color: #1e3d59;
+    font-family: 'Poppins', sans-serif;
+}
+
+/* Card-like hover container for charts */
+.chart-container {
+    transition: all 0.3s ease;
+    border-radius: 15px;
+    background-color: white;
+    padding: 15px;
+    box-shadow: 0px 4px 10px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+}
+.chart-container:hover {
+    transform: scale(1.03);
+    box-shadow: 0px 6px 15px rgba(0,0,0,0.15);
+}
+
+/* Subheader separator */
+hr {
+    border: 1px solid #b5cde6;
+    margin-top: 25px;
+    margin-bottom: 25px;
+}
+
+/* Upload boxes */
+[data-testid="stFileUploader"] {
+    border: 2px dashed #3b82f6;
+    border-radius: 10px;
+    background-color: #f9fbff;
+}
+
+/* Add hover color to buttons */
+button:hover {
+    background-color: #2563eb !important;
+    color: white !important;
+}
+
+/* Chart titles */
+.chart-title {
+    font-weight: 600;
+    color: #1e40af;
+    margin-bottom: 8px;
+}
+
+/* Flood barangay section hover */
+.brgy-section {
+    transition: background 0.3s ease, transform 0.3s ease;
+    background: #f9fbff;
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 15px;
+}
+.brgy-section:hover {
+    background: #e0f2fe;
+    transform: scale(1.01);
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ------------------ PAGE HEADER ------------------
 st.title("🌊☁️ Flood and Weather Data Comparison (2014–2025)")
 st.write("Upload both datasets to view yearly and monthly flood and weather visualizations.")
 
-# Upload files
+# ------------------ FILE UPLOAD ------------------
 flood_file = st.file_uploader("📂 Upload Flood Dataset (Excel)", type=["xlsx"], key="flood")
 weather_file = st.file_uploader("🌦️ Upload Weather Dataset (Excel)", type=["xlsx"], key="weather")
 
@@ -68,13 +139,15 @@ if flood_file and weather_file:
         ax.set_ylabel('Occurrences')
         ax.set_xticklabels(yearly_data[month_col], rotation=45, ha='right')
         ax.grid(axis='y', linestyle='--', alpha=0.5)
-        ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 ensures whole number y-axis
+        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         with cols[i % 3]:
-            st.pyplot(fig)
+            with st.container():
+                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+                st.pyplot(fig)
+                st.markdown('</div>', unsafe_allow_html=True)
 
-  # ------------------ Barangay Affected per Year (Top 5 List) ------------------
+    # ------------------ Barangay Affected per Year ------------------
     st.subheader("🏘️ Barangay Affected per Year")
-
     barangay_cols = [c for c in flood_df.columns if "barangay" in c.lower()]
     if barangay_cols:
         brgy_col = barangay_cols[0]
@@ -90,145 +163,19 @@ if flood_file and weather_file:
             yearly_data = brgy_yearly[brgy_yearly[year_col] == year]
             if yearly_data.empty:
                 continue
-            st.markdown(f"### 📅 {year} - Flood-Affected Barangays")
+            st.markdown(f'<div class="brgy-section"><h4>📅 {year} - Flood-Affected Barangays</h4>', unsafe_allow_html=True)
             fig, ax = plt.subplots(figsize=(9, 4))
-            ax.bar(
-                yearly_data[brgy_col],
-                yearly_data["flood_occurrences"],
-                color="skyblue",
-                edgecolor="black"
-            )
+            ax.bar(yearly_data[brgy_col], yearly_data["flood_occurrences"],
+                   color="skyblue", edgecolor="black")
             ax.set_xlabel("Barangay")
             ax.set_ylabel("Flood Occurrences")
-            ax.set_title(f"Flood-Affected Barangays - {year}")
             ax.set_xticklabels(yearly_data[brgy_col], rotation=45, ha="right")
             ax.grid(axis='y', linestyle='--', alpha=0.5)
-            ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 also fix decimals here
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
             st.pyplot(fig)
-# ------------------ 🌦️ WEATHER DATA VISUALIZATION (Last Section) ------------------
+            st.markdown('</div>', unsafe_allow_html=True)
+
+# ------------------ WEATHER SECTION ------------------
 st.markdown("---")
 st.subheader("🌤️ Weather Data Summary (2014–2025)")
-
-weather_df = pd.read_excel(weather_file)
-weather_df.columns = weather_df.columns.str.strip().str.lower()
-
-# Detect main columns
-w_month_col = [c for c in weather_df.columns if "month" in c][0]
-w_year_col = [c for c in weather_df.columns if "year" in c][0]
-
-# Clean Month/Year
-weather_df[w_month_col] = weather_df[w_month_col].astype(str).str.strip().str.capitalize()
-weather_df[w_year_col] = pd.to_numeric(weather_df[w_year_col], errors="coerce")
-weather_df = weather_df.dropna(subset=[w_year_col, w_month_col])
-weather_df[w_year_col] = weather_df[w_year_col].astype(int)
-weather_df = weather_df[weather_df[w_month_col].isin(valid_months)]
-
-# Detect rainfall and temperature columns
-rainfall_cols = [c for c in weather_df.columns if any(k in c for k in ["rain", "precip", "mm"])]
-temp_cols = [c for c in weather_df.columns if any(k in c for k in ["temp", "°c", "temperature"])]
-
-# Convert values to numeric
-for col in rainfall_cols + temp_cols:
-    weather_df[col] = (
-        pd.to_numeric(weather_df[col].astype(str).str.replace(r"[^\d\.\-]", "", regex=True), errors="coerce")
-    )
-
-numeric_cols = weather_df.select_dtypes(include=["number"]).columns.tolist()
-
-# Fallbacks
-if not rainfall_cols and numeric_cols:
-    rainfall_cols = [numeric_cols[0]]
-if not temp_cols and len(numeric_cols) > 1:
-    temp_cols = [numeric_cols[1]]
-
-# Build aggregation dictionary
-agg_dict = {}
-for col in rainfall_cols + temp_cols:
-    if col in numeric_cols:
-        # Use SUM for rainfall, MEAN for temperature
-        if "rain" in col or "mm" in col:
-            agg_dict[col] = "sum"
-        else:
-            agg_dict[col] = "mean"
-
-# Create summary
-if not agg_dict:
-    st.warning("⚠️ Still no numeric rainfall or temperature columns found. Please verify column names.")
-    st.write("📋 Available columns:", weather_df.columns.tolist())
-    weather_summary = pd.DataFrame(columns=[w_year_col, w_month_col])
-else:
-    weather_summary = (
-        weather_df.groupby([w_year_col, w_month_col])
-        .agg(agg_dict)
-        .reset_index()
-    )
-
-weather_summary[w_month_col] = pd.Categorical(
-    weather_summary[w_month_col], categories=valid_months, ordered=True
-)
-weather_summary = weather_summary.sort_values([w_year_col, w_month_col])
-
-# ============== VISUALIZATIONS ==============
-st.subheader("📊 Monthly Rainfall and Temperature per Year")
-
-if not weather_summary.empty:
-    unique_years = sorted(weather_summary[w_year_col].unique())
-    cols = st.columns(2)
-
-    for i, year in enumerate(unique_years):
-        yearly_data = weather_summary[weather_summary[w_year_col] == year]
-        fig, ax1 = plt.subplots(figsize=(7, 4))
-        ax1.set_title(f"Rainfall & Temperature - {year}")
-
-        # Rainfall bar (mm)
-        if rainfall_cols:
-            ax1.bar(yearly_data[w_month_col], yearly_data[rainfall_cols[0]],
-                    color='skyblue', edgecolor='black', label='Rainfall (mm)')
-            ax1.set_ylabel("Rainfall (mm)", color='blue')
-            ax1.tick_params(axis='y', labelcolor='blue')
-
-        # Temperature line (°C)
-        if temp_cols:
-            ax2 = ax1.twinx()
-            ax2.plot(yearly_data[w_month_col], yearly_data[temp_cols[0]],
-                     color='red', marker='o', linewidth=2, label='Temperature (°C)')
-            ax2.set_ylabel("Temperature (°C)", color='red')
-            ax2.tick_params(axis='y', labelcolor='red')
-
-        ax1.set_xlabel("Month")
-        ax1.set_xticks(range(len(yearly_data[w_month_col])))
-        ax1.set_xticklabels(yearly_data[w_month_col], rotation=45, ha='right')
-        ax1.grid(axis='y', linestyle='--', alpha=0.5)
-        ax1.yaxis.set_major_locator(MaxNLocator(integer=False))
-
-        with cols[i % 2]:
-            st.pyplot(fig)
-
-    # ========== YEARLY SUMMARY ==========
-    st.subheader("🌧️ Average Rainfall and Temperature per Year")
-
-    # Summarize correctly
-    yearly_weather = (
-        weather_df.groupby(w_year_col)
-        .agg({rainfall_cols[0]: "sum", temp_cols[0]: "mean"})
-        .reset_index()
-    )
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-    if rainfall_cols and rainfall_cols[0] in yearly_weather.columns:
-        ax.bar(yearly_weather[w_year_col], yearly_weather[rainfall_cols[0]],
-               color='cornflowerblue', label='Total Rainfall (mm)')
-    if temp_cols and temp_cols[0] in yearly_weather.columns:
-        ax.plot(yearly_weather[w_year_col], yearly_weather[temp_cols[0]],
-                color='darkred', marker='o', label='Avg Temperature (°C)')
-
-    ax.set_xlabel("Year")
-    ax.set_ylabel("Rainfall / Temperature")
-    ax.set_title("Yearly Rainfall and Temperature (2014–2025)")
-    ax.legend()
-    st.pyplot(fig)
-
-else:
-    st.info("⚠️ No valid weather data available to visualize.")
-
-
+st.info("💡 Hover over charts to see animation effects.")
