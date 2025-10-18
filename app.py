@@ -105,86 +105,118 @@ if flood_file and weather_file:
             ax.grid(axis='y', linestyle='--', alpha=0.5)
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 also fix decimals here
             st.pyplot(fig)
-# ------------------ 🌦️ WEATHER DATA VISUALIZATION (2014–2025) ------------------
-st.markdown("---")
-st.subheader("🌦️ Daily Weather Data per Year (2014–2025)")
+    # ------------------ 🌦️ WEATHER DATA VISUALIZATION (Last Section) ------------------
+    st.markdown("---")
+    st.subheader("🌤️ Weather Data Summary (2014–2025)")
 
-import re
+    weather_df = pd.read_excel(weather_file)
+    weather_df.columns = weather_df.columns.str.strip().str.lower()
 
-# Load dataset
-weather_df = pd.read_excel(weather_file)
-weather_df.columns = weather_df.columns.str.strip().str.lower()
+    # Detect main columns
+    w_month_col = [c for c in weather_df.columns if "month" in c][0]
+    w_year_col = [c for c in weather_df.columns if "year" in c][0]
 
-# ---------------- Robust column detection ----------------
-weather_df.columns = weather_df.columns.str.strip().str.lower().str.replace(" ", "")
-st.write("📋 Cleaned column names:", list(weather_df.columns))  # 👈 shows what names are detected
+    # Clean Month/Year
+    weather_df[w_month_col] = weather_df[w_month_col].astype(str).str.strip().str.capitalize()
+    weather_df[w_year_col] = pd.to_numeric(weather_df[w_year_col], errors="coerce")
+    weather_df = weather_df.dropna(subset=[w_year_col, w_month_col])
+    weather_df[w_year_col] = weather_df[w_year_col].astype(int)
+    weather_df = weather_df[weather_df[w_month_col].isin(valid_months)]
 
-# Try to detect the main columns
-year_col = next((c for c in weather_df.columns if "year" in c), None)
-month_col = next((c for c in weather_df.columns if "month" in c), None)
-day_col = next((c for c in weather_df.columns if "day" in c), None)
-temp_col = next((c for c in weather_df.columns if "temp" in c or "°c" in c), None)
-rain_col = next((c for c in weather_df.columns if "rain" in c), None)
+    # Try to detect rainfall and temperature columns (more flexible)
+    rainfall_cols = [c for c in weather_df.columns if any(k in c for k in ["rain", "precip", "mm"])]
+    temp_cols = [c for c in weather_df.columns if any(k in c for k in ["temp", "°c", "temperature", "avg temp"])]
 
-st.write("🧭 Detected columns:", {
-    "Year": year_col,
-    "Month": month_col,
-    "Day": day_col,
-    "Temperature": temp_col,
-    "Rainfall": rain_col
-})
+    # Convert all numeric-like strings to numbers
+    for col in rainfall_cols + temp_cols:
+        weather_df[col] = pd.to_numeric(weather_df[col], errors="coerce")
 
-# Clean and convert data
-for col in [year_col, month_col, day_col]:
-    weather_df[col] = pd.to_numeric(weather_df[col], errors='coerce')
-weather_df[temp_col] = pd.to_numeric(weather_df[temp_col], errors='coerce')
-weather_df[rain_col] = pd.to_numeric(weather_df[rain_col], errors='coerce')
+    numeric_cols = weather_df.select_dtypes(include=["number"]).columns.tolist()
 
-# Drop rows with missing data
-weather_df = weather_df.dropna(subset=[year_col, month_col, day_col])
-weather_df[year_col] = weather_df[year_col].astype(int)
+    # Fallbacks
+    if not rainfall_cols and numeric_cols:
+        rainfall_cols = [numeric_cols[0]]
+    if not temp_cols and len(numeric_cols) > 1:
+        temp_cols = [numeric_cols[1]]
 
-# Create full date column
-weather_df['date'] = pd.to_datetime(weather_df[[year_col, month_col, day_col]], errors='coerce')
-weather_df = weather_df.dropna(subset=['date']).sort_values('date')
+    # Build aggregation dictionary
+    agg_dict = {}
+    for col in rainfall_cols + temp_cols:
+        if col in numeric_cols:
+            agg_dict[col] = "mean"
 
-# Available years
-available_years = sorted(weather_df[year_col].unique().tolist())
+    if not agg_dict:
+        st.warning("⚠️ Still no numeric rainfall or temperature columns found. Please verify column names.")
+        st.write("📋 Available columns:", weather_df.columns.tolist())
+        weather_summary = pd.DataFrame(columns=[w_year_col, w_month_col])
+    else:
+        weather_summary = (
+            weather_df.groupby([w_year_col, w_month_col])
+            .agg(agg_dict)
+            .reset_index()
+        )
 
-if not available_years:
-    st.warning("⚠️ No valid year data found in your weather dataset.")
-else:
-    for year in available_years:
-        yearly_data = weather_df[weather_df[year_col] == year]
-        if yearly_data.empty:
-            continue
+    weather_summary[w_month_col] = pd.Categorical(
+        weather_summary[w_month_col], categories=valid_months, ordered=True
+    )
+    weather_summary = weather_summary.sort_values([w_year_col, w_month_col])
 
-        st.markdown(f"## 📆 Weather Trends for {year}")
+    # ============== VISUALIZATIONS ==============
+    st.subheader("📊 Monthly Rainfall and Temperature per Year")
 
-        # 🌧️ Daily Rainfall Chart
-        fig_rain, ax_rain = plt.subplots(figsize=(10, 4))
-        ax_rain.fill_between(yearly_data['date'], yearly_data[rain_col],
-                             color='skyblue', alpha=0.6)
-        ax_rain.plot(yearly_data['date'], yearly_data[rain_col],
-                     color='blue', linewidth=1.5)
-        ax_rain.set_title(f"🌧️ Daily Rainfall - {year}", fontsize=12, weight='bold')
-        ax_rain.set_xlabel("Date")
-        ax_rain.set_ylabel("Rainfall (mm)")
-        ax_rain.grid(True, linestyle='--', alpha=0.4)
-        plt.xticks(rotation=45)
-        st.pyplot(fig_rain)
+    if not weather_summary.empty:
+        unique_years = sorted(weather_summary[w_year_col].unique())
+        cols = st.columns(2)
+        for i, year in enumerate(unique_years):
+            yearly_data = weather_summary[weather_summary[w_year_col] == year]
+            fig, ax1 = plt.subplots(figsize=(7, 4))
+            ax1.set_title(f"Rainfall & Temperature - {year}")
 
-        # 🌡️ Daily Temperature Chart
-        fig_temp, ax_temp = plt.subplots(figsize=(10, 4))
-        ax_temp.plot(yearly_data['date'], yearly_data[temp_col],
-                     color='darkred', marker='o', markersize=3, linewidth=1.6)
-        ax_temp.fill_between(yearly_data['date'], yearly_data[temp_col],
-                             color='lightcoral', alpha=0.4)
-        ax_temp.set_title(f"🌡️ Daily Temperature - {year}", fontsize=12, weight='bold')
-        ax_temp.set_xlabel("Date")
-        ax_temp.set_ylabel("Temperature (°C)")
-        ax_temp.grid(True, linestyle='--', alpha=0.4)
-        plt.xticks(rotation=45)
-        st.pyplot(fig_temp)
+            # Rainfall bar
+            if rainfall_cols:
+                ax1.bar(yearly_data[w_month_col], yearly_data[rainfall_cols[0]],
+                        color='skyblue', edgecolor='black', label='Rainfall (mm)')
+                ax1.set_ylabel("Rainfall (mm)", color='blue')
+                ax1.tick_params(axis='y', labelcolor='blue')
 
-st.info("✅ Displays separate rainfall and temperature charts per day for each year (2014–2025).")
+            # Temperature line
+            if temp_cols:
+                ax2 = ax1.twinx()
+                ax2.plot(yearly_data[w_month_col], yearly_data[temp_cols[0]],
+                         color='red', marker='o', label='Temperature (°C)')
+                ax2.set_ylabel("Temperature (°C)", color='red')
+                ax2.tick_params(axis='y', labelcolor='red')
+
+            ax1.set_xlabel("Month")
+            ax1.set_xticklabels(yearly_data[w_month_col], rotation=45, ha='right')
+            ax1.grid(axis='y', linestyle='--', alpha=0.5)
+            ax1.yaxis.set_major_locator(MaxNLocator(integer=True))
+
+            with cols[i % 2]:
+                st.pyplot(fig)
+
+        # ========== YEARLY SUMMARY ==========
+        st.subheader("🌧️ Average Rainfall and Temperature per Year")
+
+        yearly_weather = (
+            weather_df.groupby(w_year_col)[numeric_cols]
+            .mean(numeric_only=True)
+            .reset_index()
+        )
+
+        fig, ax = plt.subplots(figsize=(8, 4))
+        if rainfall_cols and rainfall_cols[0] in yearly_weather.columns:
+            ax.bar(yearly_weather[w_year_col], yearly_weather[rainfall_cols[0]],
+                   color='cornflowerblue', label='Avg Rainfall (mm)')
+        if temp_cols and temp_cols[0] in yearly_weather.columns:
+            ax.plot(yearly_weather[w_year_col], yearly_weather[temp_cols[0]],
+                    color='darkred', marker='o', label='Avg Temperature (°C)')
+
+        ax.set_xlabel("Year")
+        ax.set_ylabel("Rainfall / Temperature")
+        ax.set_title("Yearly Average Rainfall and Temperature (2014–2025)")
+        ax.legend()
+        st.pyplot(fig)
+    else:
+        st.info("No valid weather data available to visualize.")
+
