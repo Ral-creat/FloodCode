@@ -115,12 +115,24 @@ import re
 weather_df = pd.read_excel(weather_file)
 weather_df.columns = weather_df.columns.str.strip().str.lower()
 
-# Detect columns even if slightly different in naming
-year_col = [c for c in weather_df.columns if re.search(r'\byear\b', c)][0]
-month_col = [c for c in weather_df.columns if re.search(r'\bmonth\b', c)][0]
-day_col = [c for c in weather_df.columns if re.search(r'\bday\b', c)][0]
-temp_col = [c for c in weather_df.columns if 'temp' in c][0]
-rain_col = [c for c in weather_df.columns if 'rain' in c][0]
+# ---------------- Robust column detection ----------------
+weather_df.columns = weather_df.columns.str.strip().str.lower().str.replace(" ", "")
+st.write("📋 Cleaned column names:", list(weather_df.columns))  # 👈 shows what names are detected
+
+# Try to detect the main columns
+year_col = next((c for c in weather_df.columns if "year" in c), None)
+month_col = next((c for c in weather_df.columns if "month" in c), None)
+day_col = next((c for c in weather_df.columns if "day" in c), None)
+temp_col = next((c for c in weather_df.columns if "temp" in c or "°c" in c), None)
+rain_col = next((c for c in weather_df.columns if "rain" in c), None)
+
+st.write("🧭 Detected columns:", {
+    "Year": year_col,
+    "Month": month_col,
+    "Day": day_col,
+    "Temperature": temp_col,
+    "Rainfall": rain_col
+})
 
 # Clean and convert data
 for col in [year_col, month_col, day_col]:
