@@ -3,5 +3,7 @@ pandas
 numpy
 matplotlib
 plotly
+chardet
 scikit-learn
 statsmodels
+openpyxl
