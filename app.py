@@ -1,250 +1,104 @@
-# ==========================================================
-# 🌊 Flood Pattern Data Mining & Forecasting System (Fixed Version)
-# ==========================================================
+# app.py
+"""
+Flood & Weather Data Analysis Streamlit App
+- Upload CSV/XLSX data
+- Handles UnicodeDecodeError
+- Displays data characteristics & summaries
+- Suggests preprocessing steps
+"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import plotly.express as px
-import io
-import chardet
-from sklearn.cluster import KMeans
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, classification_report, mean_squared_error, mean_absolute_error
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-from statsmodels.tsa.stattools import adfuller
 
-# ----------------------------------------------------------
-# Page setup
-# ----------------------------------------------------------
-st.set_page_config(page_title="Flood Pattern Analysis System", layout="wide", page_icon="🌊")
-st.title("🌊 Flood Pattern Data Mining and Prediction System")
+st.set_page_config(page_title="Flood & Weather Data Analyzer", layout="wide")
 
-# ==========================================================
-# 1️⃣ Data Upload and Overview (with encoding fix)
-# ==========================================================
-st.header("📂 1. Upload and Explore Data")
+# ------------------ FILE UPLOAD ------------------
+st.title("🌊 Flood & Weather Data Analysis App")
 
-uploaded = st.file_uploader("Upload your flood dataset (CSV format)", type=["csv", "xlsx", "xls"])
+uploaded = st.file_uploader("📂 Upload your CSV or Excel file", type=["csv", "xlsx"])
 
 if uploaded:
     try:
-        # ✅ Handle CSV & Excel uploads safely
-        if uploaded.name.endswith(('.xls', '.xlsx')):
-            df = pd.read_excel(uploaded)
-            encoding = "excel"
+        # Detect file type
+        if uploaded.name.endswith(".csv"):
+            try:
+                df = pd.read_csv(uploaded, encoding="utf-8")
+            except UnicodeDecodeError:
+                try:
+                    df = pd.read_csv(uploaded, encoding="latin1")
+                except Exception as e:
+                    st.error(f"❌ Error reading file: {e}")
+                    st.stop()
         else:
-            # Auto-detect CSV encoding
-            raw_data = uploaded.read()
-            result = chardet.detect(raw_data)
-            encoding = result["encoding"] if result["encoding"] else "utf-8"
+            df = pd.read_excel(uploaded)
 
-            # Read using detected encoding
-            df = pd.read_csv(io.BytesIO(raw_data), encoding=encoding, errors="replace")
+        st.success("✅ File uploaded successfully!")
 
-        st.session_state.df = df
-        st.success(f"✅ File uploaded successfully! (Detected encoding: `{encoding}`)")
-
-        # Basic info
-        st.write("**Dataset Shape:**", df.shape)
-        st.write("**Data Types:**")
-        st.write(df.dtypes)
+        # ------------------ DATA DISPLAY ------------------
+        st.subheader("📋 Data Preview")
         st.dataframe(df.head())
 
-        st.write("**Missing Values:**")
-        st.write(df.isnull().sum())
+        st.subheader("📊 Dataset Information")
+        st.write(f"**Rows:** {df.shape[0]} | **Columns:** {df.shape[1]}")
+
+        st.write("**Column Names:**", list(df.columns))
+
+        st.subheader("📈 Basic Statistics")
+        st.write(df.describe(include='all'))
+
+        # ------------------ DATA ANALYSIS ------------------
+        st.subheader("🧹 Suggested Preprocessing Steps")
+
+        suggestions = []
+
+        # Missing values
+        missing = df.isnull().sum()
+        if missing.any():
+            suggestions.append("🔹 Handle missing values (fill, drop, or impute).")
+
+        # Duplicates
+        if df.duplicated().any():
+            suggestions.append("🔹 Remove duplicate rows to avoid bias.")
+
+        # Datetime conversion
+        datetime_cols = [c for c in df.columns if 'date' in c.lower() or 'time' in c.lower()]
+        if datetime_cols:
+            suggestions.append(f"🔹 Convert {datetime_cols} to datetime format.")
+
+        # Encoding text columns
+        object_cols = df.select_dtypes(include=['object']).columns.tolist()
+        if len(object_cols) > 0:
+            suggestions.append("🔹 Encode categorical/text columns for ML models.")
+
+        # Scaling numeric data
+        num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        if len(num_cols) > 0:
+            suggestions.append("🔹 Normalize or standardize numerical columns.")
+
+        if suggestions:
+            for s in suggestions:
+                st.markdown(s)
+        else:
+            st.info("✅ Data looks clean and ready for analysis!")
+
+        # ------------------ VISUALIZATION ------------------
+        st.subheader("📉 Quick Visualizations")
+        numeric_cols = df.select_dtypes(include=np.number).columns
+
+        if len(numeric_cols) > 0:
+            selected_col = st.selectbox("Select a numeric column to visualize:", numeric_cols)
+            fig, ax = plt.subplots()
+            df[selected_col].hist(bins=20, ax=ax)
+            ax.set_title(f"Distribution of {selected_col}")
+            ax.set_xlabel(selected_col)
+            ax.set_ylabel("Frequency")
+            st.pyplot(fig)
+        else:
+            st.warning("No numeric columns available for visualization.")
 
     except Exception as e:
-        st.error(f"❌ Error loading file: {e}")
-        st.stop()
-
+        st.error(f"⚠️ Failed to process file: {e}")
 else:
-    st.info("Please upload a CSV or Excel file to begin.")
-    st.stop()
-
-# ==========================================================
-# 2️⃣ Data Cleaning and Visualization
-# ==========================================================
-st.header("🧹 2. Data Cleaning and Visualization")
-
-if "Water Level" in df.columns:
-    df["Water Level"] = (
-        df["Water Level"].astype(str)
-        .str.replace("ft", "", regex=False)
-        .str.replace(" ", "", regex=False)
-        .replace("nan", np.nan)
-    )
-    df["Water Level"] = pd.to_numeric(df["Water Level"], errors="coerce")
-    df["Water Level"].fillna(df["Water Level"].median(), inplace=True)
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.hist(df["Water Level"], bins=20, edgecolor="black", color="skyblue")
-    ax.set_title("Distribution of Water Level")
-    st.pyplot(fig)
-else:
-    st.warning("⚠️ 'Water Level' column not found in dataset.")
-
-# ==========================================================
-# 3️⃣ Clustering and Pattern Discovery
-# ==========================================================
-st.header("🔍 3. Flood Pattern Clustering (K-Means)")
-
-cluster_cols = ["Water Level", "No. of Families affected", "Damage Infrastructure", "Damage Agriculture"]
-available_cols = [col for col in cluster_cols if col in df.columns]
-
-if len(available_cols) >= 2:
-    X = df[available_cols].fillna(0)
-    kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-    df["Cluster"] = kmeans.fit_predict(X)
-    st.write("**Cluster Counts:**")
-    st.bar_chart(df["Cluster"].value_counts())
-
-    fig, ax = plt.subplots()
-    ax.scatter(df[available_cols[0]], df[available_cols[1]], c=df["Cluster"], cmap="viridis")
-    ax.set_xlabel(available_cols[0])
-    ax.set_ylabel(available_cols[1])
-    ax.set_title("Cluster Visualization")
-    st.pyplot(fig)
-else:
-    st.warning("⚠️ Not enough columns for clustering.")
-
-# ==========================================================
-# 4️⃣ Flood Occurrence Prediction (Random Forest)
-# ==========================================================
-st.header("🤖 4. Flood Occurrence Prediction")
-
-df["flood_occurred"] = (df["Water Level"] > 0).astype(int)
-
-if "Month" in df.columns:
-    df["Month"] = df["Month"].fillna("Unknown")
-    month_dummies = pd.get_dummies(df["Month"], prefix="Month")
-    df = pd.concat([df, month_dummies], axis=1)
-else:
-    st.warning("⚠️ 'Month' column missing; skipping month-based features.")
-    month_dummies = pd.DataFrame()
-
-features = [col for col in ["Water Level", "No. of Families affected", "Damage Infrastructure", "Damage Agriculture"] if col in df.columns]
-features += list(month_dummies.columns)
-
-if len(features) > 0:
-    X = df[features].fillna(0)
-    y = df["flood_occurred"]
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-    rf = RandomForestClassifier(random_state=42)
-    rf.fit(X_train, y_train)
-    y_pred = rf.predict(X_test)
-
-    st.metric("Model Accuracy", f"{accuracy_score(y_test, y_pred):.2%}")
-    st.text("Classification Report:")
-    st.text(classification_report(y_test, y_pred))
-else:
-    st.warning("⚠️ Not enough features for prediction model.")
-
-# Monthly flood probability
-if "Month" in df.columns:
-    monthly_flood = df.groupby("Month")["flood_occurred"].mean().sort_values(ascending=False)
-    st.subheader("📅 Monthly Flood Probability")
-    fig2, ax2 = plt.subplots()
-    monthly_flood.plot(kind="bar", ax=ax2, color="skyblue")
-    ax2.set_ylabel("Flood Probability")
-    st.pyplot(fig2)
-
-# ==========================================================
-# 5️⃣ SARIMA Time-Series Forecasting
-# ==========================================================
-st.header("📈 5. SARIMA Water Level Forecasting")
-
-if all(col in df.columns for col in ["Year", "Month", "Day"]):
-    month_map = {"JANUARY":1,"FEBRUARY":2,"MARCH":3,"APRIL":4,"MAY":5,"JUNE":6,
-                 "JULY":7,"AUGUST":8,"SEPTEMBER":9,"OCTOBER":10,"NOVEMBER":11,"DECEMBER":12,"Unknown":1}
-    df["Month_Num"] = df["Month"].map(month_map)
-    df["Year"] = df["Year"].fillna(method="ffill").astype(int)
-    df["Day"] = df["Day"].fillna(method="ffill").astype(int)
-    temp = df[["Year","Month_Num","Day"]].rename(columns={"Month_Num":"month"})
-    df["Date"] = pd.to_datetime(temp, errors="coerce")
-    df = df.set_index("Date")
-    ts = df["Water Level"].resample("D").mean().fillna(method="ffill").fillna(method="bfill")
-
-    st.line_chart(ts, use_container_width=True)
-
-    adf = adfuller(ts.dropna())
-    st.write(f"ADF Statistic: {adf[0]:.4f}, p-value: {adf[1]:.4f}")
-
-    p = st.number_input("p", 0, 5, 1)
-    d = st.number_input("d", 0, 2, 1)
-    q = st.number_input("q", 0, 5, 1)
-    s = st.number_input("Seasonal period (s)", 1, 365, 7)
-    steps = st.slider("Days to forecast ahead", 7, 90, 30)
-
-    if st.button("🚀 Train SARIMA Model"):
-        try:
-            model = SARIMAX(ts, order=(p, d, q), seasonal_order=(1, 0, 1, s))
-            results = model.fit(disp=False)
-            future_dates = pd.date_range(ts.index[-1] + pd.Timedelta(days=1), periods=steps, freq="D")
-            forecast = results.predict(start=future_dates[0], end=future_dates[-1])
-
-            fig3, ax3 = plt.subplots(figsize=(10, 5))
-            ax3.plot(ts, label="Historical")
-            ax3.plot(forecast, color="red", label="Forecast")
-            ax3.legend()
-            ax3.set_title("SARIMA Forecast of Daily Average Water Level")
-            st.pyplot(fig3)
-
-            fitted = results.fittedvalues
-            rmse = np.sqrt(mean_squared_error(ts.loc[fitted.index], fitted))
-            mae = mean_absolute_error(ts.loc[fitted.index], fitted)
-            st.metric("RMSE", f"{rmse:.4f}")
-            st.metric("MAE", f"{mae:.4f}")
-        except Exception as e:
-            st.error(f"Model training failed: {e}")
-else:
-    st.info("⏳ SARIMA requires Year, Month, and Day columns to create a date index.")
-
-# ==========================================================
-# 6️⃣ Insights and Recommendations
-# ==========================================================
-st.header("📊 6. Insights and Recommendations Dashboard")
-
-if "flood_occurred" in df.columns and "Month" in df.columns:
-    st.subheader("🌧️ Flood Occurrence by Month")
-    monthly = df.groupby("Month")["flood_occurred"].mean().sort_values(ascending=False)
-    st.bar_chart(monthly)
-    st.write("Top 3 flood-prone months:")
-    st.dataframe(monthly.head(3))
-
-if "Barangay" in df.columns:
-    st.subheader("🏘️ Most Affected Barangays")
-    brgy = df.groupby("Barangay")["Water Level"].mean().sort_values(ascending=False)
-    st.bar_chart(brgy.head(10))
-
-if "Flood Cause" in df.columns:
-    st.subheader("⚠️ Common Flood Causes")
-    causes = df["Flood Cause"].value_counts()
-    st.plotly_chart(px.pie(values=causes.values, names=causes.index, title="Flood Causes Distribution"))
-
-if "Cluster" in df.columns:
-    st.subheader("🧩 Cluster Summary")
-    st.dataframe(df.groupby("Cluster")[["Water Level", "Damage Infrastructure", "Damage Agriculture"]].mean().round(2))
-
-st.markdown("""
----
-### 🧠 **Key Takeaways**
-- **Peak Flood Season:** December to February  
-- **Top Flood-Prone Barangays:** Poblacion, Imelda, Bunawan Brook  
-- **Main Causes:** Low Pressure Area (LPA), Easterlies, Shearline  
-- **Cluster Insights:**  
-  - Cluster 0 → Frequent low-impact floods  
-  - Cluster 1 → Moderate with agricultural damage  
-  - Cluster 2 → Severe infrastructure damage  
-
----
-### 🛠 **Recommendations**
-- Strengthen flood defenses in top barangays  
-- Develop early warning systems based on LPA and Shearline alerts  
-- Support flood-resilient crops in agricultural areas  
-- Improve data recording for better model accuracy  
-""")
-
-st.success("✅ Analysis complete! Explore results and plan accordingly.")
+    st.info("⬆️ Upload a CSV or Excel file to start the analysis.")
