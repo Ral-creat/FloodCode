@@ -115,10 +115,7 @@ import re
 weather_df = pd.read_excel(weather_file)
 weather_df.columns = weather_df.columns.str.strip().str.lower()
 
-# Debug: show columns for verification
-st.write("📋 Columns detected:", list(weather_df.columns))
-
-# Try to detect main columns (even with extra symbols)
+# Detect columns even if slightly different in naming
 year_col = [c for c in weather_df.columns if re.search(r'\byear\b', c)][0]
 month_col = [c for c in weather_df.columns if re.search(r'\bmonth\b', c)][0]
 day_col = [c for c in weather_df.columns if re.search(r'\bday\b', c)][0]
@@ -131,49 +128,51 @@ for col in [year_col, month_col, day_col]:
 weather_df[temp_col] = pd.to_numeric(weather_df[temp_col], errors='coerce')
 weather_df[rain_col] = pd.to_numeric(weather_df[rain_col], errors='coerce')
 
+# Drop rows with missing data
 weather_df = weather_df.dropna(subset=[year_col, month_col, day_col])
 weather_df[year_col] = weather_df[year_col].astype(int)
 
-# Create proper date column
+# Create full date column
 weather_df['date'] = pd.to_datetime(weather_df[[year_col, month_col, day_col]], errors='coerce')
-weather_df = weather_df.dropna(subset=['date'])
-weather_df = weather_df.sort_values('date')
+weather_df = weather_df.dropna(subset=['date']).sort_values('date')
 
-# Detect years in dataset
+# Available years
 available_years = sorted(weather_df[year_col].unique().tolist())
-st.write("📅 Available years in file:", available_years)
 
 if not available_years:
-    st.warning("⚠️ No valid year data found in your dataset. Please verify Excel columns.")
+    st.warning("⚠️ No valid year data found in your weather dataset.")
 else:
     for year in available_years:
         yearly_data = weather_df[weather_df[year_col] == year]
+        if yearly_data.empty:
+            continue
 
         st.markdown(f"## 📆 Weather Trends for {year}")
 
-        # 🌧️ Rainfall graph
-        fig1, ax1 = plt.subplots(figsize=(10, 4))
-        ax1.plot(yearly_data['date'], yearly_data[rain_col],
-                 color='royalblue', marker='o', linewidth=1.8)
-        ax1.set_title(f"🌧️ Daily Rainfall - {year}")
-        ax1.set_xlabel("Date")
-        ax1.set_ylabel("Rainfall (mm)")
-        ax1.grid(True, linestyle='--', alpha=0.5)
+        # 🌧️ Daily Rainfall Chart
+        fig_rain, ax_rain = plt.subplots(figsize=(10, 4))
+        ax_rain.fill_between(yearly_data['date'], yearly_data[rain_col],
+                             color='skyblue', alpha=0.6)
+        ax_rain.plot(yearly_data['date'], yearly_data[rain_col],
+                     color='blue', linewidth=1.5)
+        ax_rain.set_title(f"🌧️ Daily Rainfall - {year}", fontsize=12, weight='bold')
+        ax_rain.set_xlabel("Date")
+        ax_rain.set_ylabel("Rainfall (mm)")
+        ax_rain.grid(True, linestyle='--', alpha=0.4)
         plt.xticks(rotation=45)
-        st.pyplot(fig1)
+        st.pyplot(fig_rain)
 
-        # 🌡️ Temperature graph
-        fig2, ax2 = plt.subplots(figsize=(10, 4))
-        ax2.plot(yearly_data['date'], yearly_data[temp_col],
-                 color='darkred', marker='o', linewidth=1.8)
-        ax2.set_title(f"🌡️ Daily Temperature - {year}")
-        ax2.set_xlabel("Date")
-        ax2.set_ylabel("Temperature (°C)")
-        ax2.grid(True, linestyle='--', alpha=0.5)
+        # 🌡️ Daily Temperature Chart
+        fig_temp, ax_temp = plt.subplots(figsize=(10, 4))
+        ax_temp.plot(yearly_data['date'], yearly_data[temp_col],
+                     color='darkred', marker='o', markersize=3, linewidth=1.6)
+        ax_temp.fill_between(yearly_data['date'], yearly_data[temp_col],
+                             color='lightcoral', alpha=0.4)
+        ax_temp.set_title(f"🌡️ Daily Temperature - {year}", fontsize=12, weight='bold')
+        ax_temp.set_xlabel("Date")
+        ax_temp.set_ylabel("Temperature (°C)")
+        ax_temp.grid(True, linestyle='--', alpha=0.4)
         plt.xticks(rotation=45)
-        st.pyplot(fig2)
+        st.pyplot(fig_temp)
 
-st.info("✅ Displays rainfall and temperature per day for all available years (2014–2025).")
-
-
-
+st.info("✅ Displays separate rainfall and temperature charts per day for each year (2014–2025).")
