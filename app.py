@@ -1,11 +1,13 @@
 # ==========================================================
-# 🌊 Flood Pattern Data Mining & Forecasting System
+# 🌊 Flood Pattern Data Mining & Forecasting System (Fixed Version)
 # ==========================================================
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.express as px
+import io
+import chardet
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
@@ -20,25 +22,45 @@ st.set_page_config(page_title="Flood Pattern Analysis System", layout="wide", pa
 st.title("🌊 Flood Pattern Data Mining and Prediction System")
 
 # ==========================================================
-# 1️⃣ Data Upload and Overview
+# 1️⃣ Data Upload and Overview (with encoding fix)
 # ==========================================================
 st.header("📂 1. Upload and Explore Data")
 
-uploaded = st.file_uploader("Upload your flood dataset (CSV format)", type=["csv"])
+uploaded = st.file_uploader("Upload your flood dataset (CSV format)", type=["csv", "xlsx", "xls"])
+
 if uploaded:
-    df = pd.read_csv(uploaded)
-    st.session_state.df = df
-    st.success("✅ File uploaded successfully!")
+    try:
+        # ✅ Handle CSV & Excel uploads safely
+        if uploaded.name.endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(uploaded)
+            encoding = "excel"
+        else:
+            # Auto-detect CSV encoding
+            raw_data = uploaded.read()
+            result = chardet.detect(raw_data)
+            encoding = result["encoding"] if result["encoding"] else "utf-8"
 
-    st.write("**Dataset Shape:**", df.shape)
-    st.write("**Data Types:**")
-    st.write(df.dtypes)
-    st.dataframe(df.head())
+            # Read using detected encoding
+            df = pd.read_csv(io.BytesIO(raw_data), encoding=encoding, errors="replace")
 
-    st.write("**Missing Values:**")
-    st.write(df.isnull().sum())
+        st.session_state.df = df
+        st.success(f"✅ File uploaded successfully! (Detected encoding: `{encoding}`)")
+
+        # Basic info
+        st.write("**Dataset Shape:**", df.shape)
+        st.write("**Data Types:**")
+        st.write(df.dtypes)
+        st.dataframe(df.head())
+
+        st.write("**Missing Values:**")
+        st.write(df.isnull().sum())
+
+    except Exception as e:
+        st.error(f"❌ Error loading file: {e}")
+        st.stop()
+
 else:
-    st.info("Please upload a CSV file to begin.")
+    st.info("Please upload a CSV or Excel file to begin.")
     st.stop()
 
 # ==========================================================
@@ -46,19 +68,22 @@ else:
 # ==========================================================
 st.header("🧹 2. Data Cleaning and Visualization")
 
-df["Water Level"] = (
-    df["Water Level"].astype(str)
-    .str.replace("ft", "")
-    .str.replace(" ", "")
-    .replace("nan", np.nan)
-)
-df["Water Level"] = pd.to_numeric(df["Water Level"], errors="coerce")
-df["Water Level"].fillna(df["Water Level"].median(), inplace=True)
+if "Water Level" in df.columns:
+    df["Water Level"] = (
+        df["Water Level"].astype(str)
+        .str.replace("ft", "", regex=False)
+        .str.replace(" ", "", regex=False)
+        .replace("nan", np.nan)
+    )
+    df["Water Level"] = pd.to_numeric(df["Water Level"], errors="coerce")
+    df["Water Level"].fillna(df["Water Level"].median(), inplace=True)
 
-fig, ax = plt.subplots(figsize=(8, 4))
-ax.hist(df["Water Level"], bins=20, edgecolor="black", color="skyblue")
-ax.set_title("Distribution of Water Level")
-st.pyplot(fig)
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.hist(df["Water Level"], bins=20, edgecolor="black", color="skyblue")
+    ax.set_title("Distribution of Water Level")
+    st.pyplot(fig)
+else:
+    st.warning("⚠️ 'Water Level' column not found in dataset.")
 
 # ==========================================================
 # 3️⃣ Clustering and Pattern Discovery
@@ -66,19 +91,23 @@ st.pyplot(fig)
 st.header("🔍 3. Flood Pattern Clustering (K-Means)")
 
 cluster_cols = ["Water Level", "No. of Families affected", "Damage Infrastructure", "Damage Agriculture"]
-X = df[cluster_cols].fillna(0)
+available_cols = [col for col in cluster_cols if col in df.columns]
 
-kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-df["Cluster"] = kmeans.fit_predict(X)
-st.write("**Cluster Counts:**")
-st.bar_chart(df["Cluster"].value_counts())
+if len(available_cols) >= 2:
+    X = df[available_cols].fillna(0)
+    kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+    df["Cluster"] = kmeans.fit_predict(X)
+    st.write("**Cluster Counts:**")
+    st.bar_chart(df["Cluster"].value_counts())
 
-fig, ax = plt.subplots()
-ax.scatter(df["Water Level"], df["Damage Infrastructure"], c=df["Cluster"], cmap="viridis")
-ax.set_xlabel("Water Level")
-ax.set_ylabel("Damage Infrastructure")
-ax.set_title("Cluster Visualization")
-st.pyplot(fig)
+    fig, ax = plt.subplots()
+    ax.scatter(df[available_cols[0]], df[available_cols[1]], c=df["Cluster"], cmap="viridis")
+    ax.set_xlabel(available_cols[0])
+    ax.set_ylabel(available_cols[1])
+    ax.set_title("Cluster Visualization")
+    st.pyplot(fig)
+else:
+    st.warning("⚠️ Not enough columns for clustering.")
 
 # ==========================================================
 # 4️⃣ Flood Occurrence Prediction (Random Forest)
@@ -95,18 +124,23 @@ else:
     st.warning("⚠️ 'Month' column missing; skipping month-based features.")
     month_dummies = pd.DataFrame()
 
-features = ["Water Level", "No. of Families affected", "Damage Infrastructure", "Damage Agriculture"] + list(month_dummies.columns)
-X = df[features]
-y = df["flood_occurred"]
+features = [col for col in ["Water Level", "No. of Families affected", "Damage Infrastructure", "Damage Agriculture"] if col in df.columns]
+features += list(month_dummies.columns)
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-rf = RandomForestClassifier(random_state=42)
-rf.fit(X_train, y_train)
-y_pred = rf.predict(X_test)
+if len(features) > 0:
+    X = df[features].fillna(0)
+    y = df["flood_occurred"]
 
-st.metric("Model Accuracy", f"{accuracy_score(y_test, y_pred):.2%}")
-st.text("Classification Report:")
-st.text(classification_report(y_test, y_pred))
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+    rf = RandomForestClassifier(random_state=42)
+    rf.fit(X_train, y_train)
+    y_pred = rf.predict(X_test)
+
+    st.metric("Model Accuracy", f"{accuracy_score(y_test, y_pred):.2%}")
+    st.text("Classification Report:")
+    st.text(classification_report(y_test, y_pred))
+else:
+    st.warning("⚠️ Not enough features for prediction model.")
 
 # Monthly flood probability
 if "Month" in df.columns:
@@ -123,7 +157,6 @@ if "Month" in df.columns:
 st.header("📈 5. SARIMA Water Level Forecasting")
 
 if all(col in df.columns for col in ["Year", "Month", "Day"]):
-    # Create datetime
     month_map = {"JANUARY":1,"FEBRUARY":2,"MARCH":3,"APRIL":4,"MAY":5,"JUNE":6,
                  "JULY":7,"AUGUST":8,"SEPTEMBER":9,"OCTOBER":10,"NOVEMBER":11,"DECEMBER":12,"Unknown":1}
     df["Month_Num"] = df["Month"].map(month_map)
