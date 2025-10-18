@@ -3,88 +3,105 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 import pandas as pd
 
+# ==============================
+# PAGE CONFIG
+# ==============================
 st.set_page_config(page_title="Flood & Weather Comparison", layout="wide")
 
-# ------------------ 🌈 CSS Styling ------------------
+# ==============================
+# CUSTOM CSS FOR VISUAL STYLE
+# ==============================
 st.markdown("""
 <style>
-/* General page background */
+/* ---------- General Layout ---------- */
 [data-testid="stAppViewContainer"] {
-    background: linear-gradient(135deg, #f0f7ff 0%, #ffffff 100%);
+    background: linear-gradient(120deg, #eef6ff 0%, #ffffff 100%);
+    color: #1e293b;
+    font-family: "Poppins", sans-serif;
 }
 
-/* Titles and subheaders */
+/* ---------- Titles ---------- */
 h1, h2, h3, h4 {
-    color: #1e3d59;
-    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    color: #1e3a8a;
+}
+h1 {
+    text-align: center;
+    margin-bottom: 0.5rem;
 }
 
-/* Card-like hover container for charts */
-.chart-container {
-    transition: all 0.3s ease;
-    border-radius: 15px;
-    background-color: white;
-    padding: 15px;
-    box-shadow: 0px 4px 10px rgba(0,0,0,0.05);
-    margin-bottom: 20px;
-}
-.chart-container:hover {
-    transform: scale(1.03);
-    box-shadow: 0px 6px 15px rgba(0,0,0,0.15);
-}
-
-/* Subheader separator */
-hr {
-    border: 1px solid #b5cde6;
-    margin-top: 25px;
-    margin-bottom: 25px;
-}
-
-/* Upload boxes */
+/* ---------- Upload box ---------- */
 [data-testid="stFileUploader"] {
     border: 2px dashed #3b82f6;
-    border-radius: 10px;
-    background-color: #f9fbff;
-}
-
-/* Add hover color to buttons */
-button:hover {
-    background-color: #2563eb !important;
-    color: white !important;
-}
-
-/* Chart titles */
-.chart-title {
-    font-weight: 600;
-    color: #1e40af;
-    margin-bottom: 8px;
-}
-
-/* Flood barangay section hover */
-.brgy-section {
-    transition: background 0.3s ease, transform 0.3s ease;
-    background: #f9fbff;
     border-radius: 12px;
+    background-color: #f8fafc;
     padding: 10px;
+}
+
+/* ---------- Chart Containers ---------- */
+.chart-box {
+    background: white;
+    border-radius: 15px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    padding: 15px;
+    margin-bottom: 25px;
+    transition: all 0.3s ease-in-out;
+}
+.chart-box:hover {
+    transform: scale(1.02);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+}
+
+/* ---------- Barangay Section ---------- */
+.brgy-section {
+    background: #f0f9ff;
+    border-left: 5px solid #3b82f6;
+    padding: 15px;
+    border-radius: 10px;
     margin-bottom: 15px;
+    transition: all 0.3s ease;
 }
 .brgy-section:hover {
-    background: #e0f2fe;
+    background: #dbeafe;
     transform: scale(1.01);
+}
+
+/* ---------- Chart titles ---------- */
+.chart-title {
+    text-align: center;
+    font-weight: 600;
+    color: #1d4ed8;
+    margin-bottom: 5px;
+}
+
+/* ---------- Info Box ---------- */
+[data-testid="stInfo"] {
+    border-left: 4px solid #3b82f6 !important;
+}
+
+/* ---------- Remove chart shrink ---------- */
+.css-1v0mbdj, .css-1aumxhk {
+    overflow: visible !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ------------------ PAGE HEADER ------------------
+# ==============================
+# PAGE HEADER
+# ==============================
 st.title("🌊☁️ Flood and Weather Data Comparison (2014–2025)")
-st.write("Upload both datasets to view yearly and monthly flood and weather visualizations.")
+st.write("Upload both datasets below to visualize flood and weather data by year and month.")
 
-# ------------------ FILE UPLOAD ------------------
+# ==============================
+# FILE UPLOAD SECTION
+# ==============================
 flood_file = st.file_uploader("📂 Upload Flood Dataset (Excel)", type=["xlsx"], key="flood")
 weather_file = st.file_uploader("🌦️ Upload Weather Dataset (Excel)", type=["xlsx"], key="weather")
 
 if flood_file and weather_file:
-    # ------------------ Load & Clean Flood Data ------------------
+    # ==============================
+    # LOAD & CLEAN FLOOD DATA
+    # ==============================
     flood_df = pd.read_excel(flood_file)
     flood_df.columns = flood_df.columns.str.strip().str.lower()
 
@@ -106,7 +123,9 @@ if flood_file and weather_file:
     flood_counts[month_col] = pd.Categorical(flood_counts[month_col], categories=valid_months, ordered=True)
     flood_counts = flood_counts.sort_values([year_col, month_col])
 
-    # ------------------ Load & Clean Weather Data ------------------
+    # ==============================
+    # LOAD & CLEAN WEATHER DATA
+    # ==============================
     weather_df = pd.read_excel(weather_file)
     weather_df.columns = weather_df.columns.str.strip().str.lower()
 
@@ -119,10 +138,9 @@ if flood_file and weather_file:
     weather_df[w_year_col] = weather_df[w_year_col].astype(int)
     weather_df = weather_df[weather_df[w_month_col].isin(valid_months)]
 
-    numeric_cols = weather_df.select_dtypes(include=['float64', 'int64']).columns.tolist()
-    weather_summary = weather_df.groupby(w_year_col, as_index=False)[numeric_cols].mean(numeric_only=True)
-
-    # ------------------ Flood Visuals ------------------
+    # ==============================
+    # FLOOD VISUALIZATION
+    # ==============================
     st.subheader("🌧️ Flood Occurrences per Year (2014–2025)")
     cols = st.columns(3)
     unique_years = sorted(flood_counts[year_col].unique())
@@ -131,7 +149,7 @@ if flood_file and weather_file:
         yearly_data = flood_counts[flood_counts[year_col] == year]
         if yearly_data.empty:
             continue
-        fig, ax = plt.subplots(figsize=(5,3))
+        fig, ax = plt.subplots(figsize=(5, 3))
         ax.bar(yearly_data[month_col], yearly_data['flood_occurrences'],
                color='skyblue', edgecolor='black')
         ax.set_title(f'Flood Occurrences - {year}')
@@ -141,13 +159,15 @@ if flood_file and weather_file:
         ax.grid(axis='y', linestyle='--', alpha=0.5)
         ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         with cols[i % 3]:
-            with st.container():
-                st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                st.pyplot(fig)
-                st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('<div class="chart-box">', unsafe_allow_html=True)
+            st.pyplot(fig)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-    # ------------------ Barangay Affected per Year ------------------
-    st.subheader("🏘️ Barangay Affected per Year")
+    # ==============================
+    # BARANGAY SECTION
+    # ==============================
+    st.subheader("🏘️ Flood-Affected Barangays per Year")
+
     barangay_cols = [c for c in flood_df.columns if "barangay" in c.lower()]
     if barangay_cols:
         brgy_col = barangay_cols[0]
@@ -157,16 +177,16 @@ if flood_file and weather_file:
             .reset_index(name="flood_occurrences")
             .sort_values([year_col, "flood_occurrences"], ascending=[True, False])
         )
-
         all_years = sorted(brgy_yearly[year_col].unique())
+
         for year in all_years:
             yearly_data = brgy_yearly[brgy_yearly[year_col] == year]
             if yearly_data.empty:
                 continue
-            st.markdown(f'<div class="brgy-section"><h4>📅 {year} - Flood-Affected Barangays</h4>', unsafe_allow_html=True)
-            fig, ax = plt.subplots(figsize=(9, 4))
+            st.markdown(f'<div class="brgy-section"><h4>📅 {year} - Most Affected Barangays</h4>', unsafe_allow_html=True)
+            fig, ax = plt.subplots(figsize=(8, 3.5))
             ax.bar(yearly_data[brgy_col], yearly_data["flood_occurrences"],
-                   color="skyblue", edgecolor="black")
+                   color="cornflowerblue", edgecolor="black")
             ax.set_xlabel("Barangay")
             ax.set_ylabel("Flood Occurrences")
             ax.set_xticklabels(yearly_data[brgy_col], rotation=45, ha="right")
@@ -175,7 +195,42 @@ if flood_file and weather_file:
             st.pyplot(fig)
             st.markdown('</div>', unsafe_allow_html=True)
 
-# ------------------ WEATHER SECTION ------------------
-st.markdown("---")
-st.subheader("🌤️ Weather Data Summary (2014–2025)")
-st.info("💡 Hover over charts to see animation effects.")
+    # ==============================
+    # WEATHER SUMMARY SECTION
+    # ==============================
+    st.markdown("---")
+    st.subheader("🌤️ Weather Data Summary (2014–2025)")
+    st.info("💡 Hover over any chart for animation effects.")
+
+    rainfall_cols = [c for c in weather_df.columns if any(k in c for k in ["rain", "mm"])]
+    temp_cols = [c for c in weather_df.columns if any(k in c for k in ["temp", "°c", "temperature"])]
+
+    for col in rainfall_cols + temp_cols:
+        weather_df[col] = pd.to_numeric(
+            weather_df[col].astype(str).str.replace(r"[^\d\.\-]", "", regex=True), errors="coerce"
+        )
+
+    if rainfall_cols and temp_cols:
+        yearly_weather = (
+            weather_df.groupby(w_year_col)
+            .agg({rainfall_cols[0]: "sum", temp_cols[0]: "mean"})
+            .reset_index()
+        )
+
+        # yearly combined chart
+        fig, ax1 = plt.subplots(figsize=(8, 4))
+        ax1.bar(yearly_weather[w_year_col], yearly_weather[rainfall_cols[0]],
+                color='skyblue', label='Total Rainfall (mm)')
+        ax2 = ax1.twinx()
+        ax2.plot(yearly_weather[w_year_col], yearly_weather[temp_cols[0]],
+                 color='red', marker='o', label='Avg Temperature (°C)')
+        ax1.set_xlabel("Year")
+        ax1.set_ylabel("Rainfall (mm)", color='blue')
+        ax2.set_ylabel("Temperature (°C)", color='red')
+        ax1.set_title("Yearly Rainfall & Temperature (2014–2025)")
+        st.markdown('<div class="chart-box">', unsafe_allow_html=True)
+        st.pyplot(fig)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+else:
+    st.warning("⚠️ Please upload both Flood and Weather datasets to start visualization.")
