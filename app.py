@@ -1,232 +1,217 @@
+# ==========================================================
+# 🌊 Flood Pattern Data Mining & Forecasting System
+# ==========================================================
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator  # 👈 added this
+import plotly.express as px
+from sklearn.cluster import KMeans
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report, mean_squared_error, mean_absolute_error
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from statsmodels.tsa.stattools import adfuller
 
-st.set_page_config(page_title="Flood & Weather Comparison", layout="wide")
+# ----------------------------------------------------------
+# Page setup
+# ----------------------------------------------------------
+st.set_page_config(page_title="Flood Pattern Analysis System", layout="wide", page_icon="🌊")
+st.title("🌊 Flood Pattern Data Mining and Prediction System")
 
-st.title("🌊☁️ Flood and Weather Data Comparison (2014–2025)")
-st.write("Upload both datasets to view yearly and monthly flood and weather visualizations.")
+# ==========================================================
+# 1️⃣ Data Upload and Overview
+# ==========================================================
+st.header("📂 1. Upload and Explore Data")
 
-# Upload files
-flood_file = st.file_uploader("📂 Upload Flood Dataset (Excel)", type=["xlsx"], key="flood")
-weather_file = st.file_uploader("🌦️ Upload Weather Dataset (Excel)", type=["xlsx"], key="weather")
+uploaded = st.file_uploader("Upload your flood dataset (CSV format)", type=["csv"])
+if uploaded:
+    df = pd.read_csv(uploaded)
+    st.session_state.df = df
+    st.success("✅ File uploaded successfully!")
 
-if flood_file and weather_file:
-    # ------------------ Load & Clean Flood Data ------------------
-    flood_df = pd.read_excel(flood_file)
-    flood_df.columns = flood_df.columns.str.strip().str.lower()
+    st.write("**Dataset Shape:**", df.shape)
+    st.write("**Data Types:**")
+    st.write(df.dtypes)
+    st.dataframe(df.head())
 
-    month_col = [c for c in flood_df.columns if "month" in c][0]
-    year_col = [c for c in flood_df.columns if "year" in c][0]
-
-    flood_df[month_col] = flood_df[month_col].astype(str).str.strip().str.capitalize()
-    flood_df[year_col] = pd.to_numeric(flood_df[year_col], errors='coerce')
-    flood_df = flood_df.dropna(subset=[year_col, month_col])
-    flood_df[year_col] = flood_df[year_col].astype(int)
-
-    valid_months = [
-        'January','February','March','April','May','June',
-        'July','August','September','October','November','December'
-    ]
-    flood_df = flood_df[flood_df[month_col].isin(valid_months)]
-
-    flood_counts = flood_df.groupby([year_col, month_col]).size().reset_index(name='flood_occurrences')
-    flood_counts[month_col] = pd.Categorical(flood_counts[month_col], categories=valid_months, ordered=True)
-    flood_counts = flood_counts.sort_values([year_col, month_col])
-
-    # ------------------ Load & Clean Weather Data ------------------
-    weather_df = pd.read_excel(weather_file)
-    weather_df.columns = weather_df.columns.str.strip().str.lower()
-
-    w_month_col = [c for c in weather_df.columns if "month" in c][0]
-    w_year_col = [c for c in weather_df.columns if "year" in c][0]
-
-    weather_df[w_month_col] = weather_df[w_month_col].astype(str).str.strip().str.capitalize()
-    weather_df[w_year_col] = pd.to_numeric(weather_df[w_year_col], errors='coerce')
-    weather_df = weather_df.dropna(subset=[w_year_col, w_month_col])
-    weather_df[w_year_col] = weather_df[w_year_col].astype(int)
-    weather_df = weather_df[weather_df[w_month_col].isin(valid_months)]
-
-    numeric_cols = weather_df.select_dtypes(include=['float64', 'int64']).columns.tolist()
-    weather_summary = weather_df.groupby(w_year_col, as_index=False)[numeric_cols].mean(numeric_only=True)
-
-    # ------------------ Flood Visuals ------------------
-    st.subheader("🌧️ Flood Occurrences per Year (2014–2025)")
-    cols = st.columns(3)
-    unique_years = sorted(flood_counts[year_col].unique())
-
-    for i, year in enumerate(unique_years):
-        yearly_data = flood_counts[flood_counts[year_col] == year]
-        if yearly_data.empty:
-            continue
-        fig, ax = plt.subplots(figsize=(5,3))
-        ax.bar(yearly_data[month_col], yearly_data['flood_occurrences'],
-               color='skyblue', edgecolor='black')
-        ax.set_title(f'Flood Occurrences - {year}')
-        ax.set_xlabel('Month')
-        ax.set_ylabel('Occurrences')
-        ax.set_xticklabels(yearly_data[month_col], rotation=45, ha='right')
-        ax.grid(axis='y', linestyle='--', alpha=0.5)
-        ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 ensures whole number y-axis
-        with cols[i % 3]:
-            st.pyplot(fig)
-
-  # ------------------ Barangay Affected per Year (Top 5 List) ------------------
-    st.subheader("🏘️ Barangay Affected per Year")
-
-    barangay_cols = [c for c in flood_df.columns if "barangay" in c.lower()]
-    if barangay_cols:
-        brgy_col = barangay_cols[0]
-        brgy_yearly = (
-            flood_df.groupby([year_col, brgy_col])
-            .size()
-            .reset_index(name="flood_occurrences")
-            .sort_values([year_col, "flood_occurrences"], ascending=[True, False])
-        )
-
-        all_years = sorted(brgy_yearly[year_col].unique())
-        for year in all_years:
-            yearly_data = brgy_yearly[brgy_yearly[year_col] == year]
-            if yearly_data.empty:
-                continue
-            st.markdown(f"### 📅 {year} - Flood-Affected Barangays")
-            fig, ax = plt.subplots(figsize=(9, 4))
-            ax.bar(
-                yearly_data[brgy_col],
-                yearly_data["flood_occurrences"],
-                color="skyblue",
-                edgecolor="black"
-            )
-            ax.set_xlabel("Barangay")
-            ax.set_ylabel("Flood Occurrences")
-            ax.set_title(f"Flood-Affected Barangays - {year}")
-            ax.set_xticklabels(yearly_data[brgy_col], rotation=45, ha="right")
-            ax.grid(axis='y', linestyle='--', alpha=0.5)
-            ax.yaxis.set_major_locator(MaxNLocator(integer=True))  # 👈 also fix decimals here
-            st.pyplot(fig)
-# ------------------ 🌦️ WEATHER DATA VISUALIZATION (Last Section) ------------------
-st.markdown("---")
-st.subheader("🌤️ Weather Data Summary (2014–2025)")
-
-weather_df = pd.read_excel(weather_file)
-weather_df.columns = weather_df.columns.str.strip().str.lower()
-
-# Detect main columns
-w_month_col = [c for c in weather_df.columns if "month" in c][0]
-w_year_col = [c for c in weather_df.columns if "year" in c][0]
-
-# Clean Month/Year
-weather_df[w_month_col] = weather_df[w_month_col].astype(str).str.strip().str.capitalize()
-weather_df[w_year_col] = pd.to_numeric(weather_df[w_year_col], errors="coerce")
-weather_df = weather_df.dropna(subset=[w_year_col, w_month_col])
-weather_df[w_year_col] = weather_df[w_year_col].astype(int)
-weather_df = weather_df[weather_df[w_month_col].isin(valid_months)]
-
-# Detect rainfall and temperature columns
-rainfall_cols = [c for c in weather_df.columns if any(k in c for k in ["rain", "precip", "mm"])]
-temp_cols = [c for c in weather_df.columns if any(k in c for k in ["temp", "°c", "temperature"])]
-
-# Convert values to numeric
-for col in rainfall_cols + temp_cols:
-    weather_df[col] = (
-        pd.to_numeric(weather_df[col].astype(str).str.replace(r"[^\d\.\-]", "", regex=True), errors="coerce")
-    )
-
-numeric_cols = weather_df.select_dtypes(include=["number"]).columns.tolist()
-
-# Fallbacks
-if not rainfall_cols and numeric_cols:
-    rainfall_cols = [numeric_cols[0]]
-if not temp_cols and len(numeric_cols) > 1:
-    temp_cols = [numeric_cols[1]]
-
-# Build aggregation dictionary
-agg_dict = {}
-for col in rainfall_cols + temp_cols:
-    if col in numeric_cols:
-        # Use SUM for rainfall, MEAN for temperature
-        if "rain" in col or "mm" in col:
-            agg_dict[col] = "sum"
-        else:
-            agg_dict[col] = "mean"
-
-# Create summary
-if not agg_dict:
-    st.warning("⚠️ Still no numeric rainfall or temperature columns found. Please verify column names.")
-    st.write("📋 Available columns:", weather_df.columns.tolist())
-    weather_summary = pd.DataFrame(columns=[w_year_col, w_month_col])
+    st.write("**Missing Values:**")
+    st.write(df.isnull().sum())
 else:
-    weather_summary = (
-        weather_df.groupby([w_year_col, w_month_col])
-        .agg(agg_dict)
-        .reset_index()
-    )
+    st.info("Please upload a CSV file to begin.")
+    st.stop()
 
-weather_summary[w_month_col] = pd.Categorical(
-    weather_summary[w_month_col], categories=valid_months, ordered=True
+# ==========================================================
+# 2️⃣ Data Cleaning and Visualization
+# ==========================================================
+st.header("🧹 2. Data Cleaning and Visualization")
+
+df["Water Level"] = (
+    df["Water Level"].astype(str)
+    .str.replace("ft", "")
+    .str.replace(" ", "")
+    .replace("nan", np.nan)
 )
-weather_summary = weather_summary.sort_values([w_year_col, w_month_col])
+df["Water Level"] = pd.to_numeric(df["Water Level"], errors="coerce")
+df["Water Level"].fillna(df["Water Level"].median(), inplace=True)
 
-# ============== VISUALIZATIONS ==============
-st.subheader("📊 Monthly Rainfall and Temperature per Year")
+fig, ax = plt.subplots(figsize=(8, 4))
+ax.hist(df["Water Level"], bins=20, edgecolor="black", color="skyblue")
+ax.set_title("Distribution of Water Level")
+st.pyplot(fig)
 
-if not weather_summary.empty:
-    unique_years = sorted(weather_summary[w_year_col].unique())
-    cols = st.columns(2)
+# ==========================================================
+# 3️⃣ Clustering and Pattern Discovery
+# ==========================================================
+st.header("🔍 3. Flood Pattern Clustering (K-Means)")
 
-    for i, year in enumerate(unique_years):
-        yearly_data = weather_summary[weather_summary[w_year_col] == year]
-        fig, ax1 = plt.subplots(figsize=(7, 4))
-        ax1.set_title(f"Rainfall & Temperature - {year}")
+cluster_cols = ["Water Level", "No. of Families affected", "Damage Infrastructure", "Damage Agriculture"]
+X = df[cluster_cols].fillna(0)
 
-        # Rainfall bar (mm)
-        if rainfall_cols:
-            ax1.bar(yearly_data[w_month_col], yearly_data[rainfall_cols[0]],
-                    color='skyblue', edgecolor='black', label='Rainfall (mm)')
-            ax1.set_ylabel("Rainfall (mm)", color='blue')
-            ax1.tick_params(axis='y', labelcolor='blue')
+kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+df["Cluster"] = kmeans.fit_predict(X)
+st.write("**Cluster Counts:**")
+st.bar_chart(df["Cluster"].value_counts())
 
-        # Temperature line (°C)
-        if temp_cols:
-            ax2 = ax1.twinx()
-            ax2.plot(yearly_data[w_month_col], yearly_data[temp_cols[0]],
-                     color='red', marker='o', linewidth=2, label='Temperature (°C)')
-            ax2.set_ylabel("Temperature (°C)", color='red')
-            ax2.tick_params(axis='y', labelcolor='red')
+fig, ax = plt.subplots()
+ax.scatter(df["Water Level"], df["Damage Infrastructure"], c=df["Cluster"], cmap="viridis")
+ax.set_xlabel("Water Level")
+ax.set_ylabel("Damage Infrastructure")
+ax.set_title("Cluster Visualization")
+st.pyplot(fig)
 
-        ax1.set_xlabel("Month")
-        ax1.set_xticks(range(len(yearly_data[w_month_col])))
-        ax1.set_xticklabels(yearly_data[w_month_col], rotation=45, ha='right')
-        ax1.grid(axis='y', linestyle='--', alpha=0.5)
-        ax1.yaxis.set_major_locator(MaxNLocator(integer=False))
+# ==========================================================
+# 4️⃣ Flood Occurrence Prediction (Random Forest)
+# ==========================================================
+st.header("🤖 4. Flood Occurrence Prediction")
 
-        with cols[i % 2]:
-            st.pyplot(fig)
+df["flood_occurred"] = (df["Water Level"] > 0).astype(int)
 
-    # ========== YEARLY SUMMARY ==========
-    st.subheader("🌧️ Average Rainfall and Temperature per Year")
-
-    # Summarize correctly
-    yearly_weather = (
-        weather_df.groupby(w_year_col)
-        .agg({rainfall_cols[0]: "sum", temp_cols[0]: "mean"})
-        .reset_index()
-    )
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-    if rainfall_cols and rainfall_cols[0] in yearly_weather.columns:
-        ax.bar(yearly_weather[w_year_col], yearly_weather[rainfall_cols[0]],
-               color='cornflowerblue', label='Total Rainfall (mm)')
-    if temp_cols and temp_cols[0] in yearly_weather.columns:
-        ax.plot(yearly_weather[w_year_col], yearly_weather[temp_cols[0]],
-                color='darkred', marker='o', label='Avg Temperature (°C)')
-
-    ax.set_xlabel("Year")
-    ax.set_ylabel("Rainfall / Temperature")
-    ax.set_title("Yearly Rainfall and Temperature (2014–2025)")
-    ax.legend()
-    st.pyplot(fig)
-
+if "Month" in df.columns:
+    df["Month"] = df["Month"].fillna("Unknown")
+    month_dummies = pd.get_dummies(df["Month"], prefix="Month")
+    df = pd.concat([df, month_dummies], axis=1)
 else:
-    st.info("⚠️ No valid weather data available to visualize.")
+    st.warning("⚠️ 'Month' column missing; skipping month-based features.")
+    month_dummies = pd.DataFrame()
+
+features = ["Water Level", "No. of Families affected", "Damage Infrastructure", "Damage Agriculture"] + list(month_dummies.columns)
+X = df[features]
+y = df["flood_occurred"]
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+rf = RandomForestClassifier(random_state=42)
+rf.fit(X_train, y_train)
+y_pred = rf.predict(X_test)
+
+st.metric("Model Accuracy", f"{accuracy_score(y_test, y_pred):.2%}")
+st.text("Classification Report:")
+st.text(classification_report(y_test, y_pred))
+
+# Monthly flood probability
+if "Month" in df.columns:
+    monthly_flood = df.groupby("Month")["flood_occurred"].mean().sort_values(ascending=False)
+    st.subheader("📅 Monthly Flood Probability")
+    fig2, ax2 = plt.subplots()
+    monthly_flood.plot(kind="bar", ax=ax2, color="skyblue")
+    ax2.set_ylabel("Flood Probability")
+    st.pyplot(fig2)
+
+# ==========================================================
+# 5️⃣ SARIMA Time-Series Forecasting
+# ==========================================================
+st.header("📈 5. SARIMA Water Level Forecasting")
+
+if all(col in df.columns for col in ["Year", "Month", "Day"]):
+    # Create datetime
+    month_map = {"JANUARY":1,"FEBRUARY":2,"MARCH":3,"APRIL":4,"MAY":5,"JUNE":6,
+                 "JULY":7,"AUGUST":8,"SEPTEMBER":9,"OCTOBER":10,"NOVEMBER":11,"DECEMBER":12,"Unknown":1}
+    df["Month_Num"] = df["Month"].map(month_map)
+    df["Year"] = df["Year"].fillna(method="ffill").astype(int)
+    df["Day"] = df["Day"].fillna(method="ffill").astype(int)
+    temp = df[["Year","Month_Num","Day"]].rename(columns={"Month_Num":"month"})
+    df["Date"] = pd.to_datetime(temp, errors="coerce")
+    df = df.set_index("Date")
+    ts = df["Water Level"].resample("D").mean().fillna(method="ffill").fillna(method="bfill")
+
+    st.line_chart(ts, use_container_width=True)
+
+    adf = adfuller(ts.dropna())
+    st.write(f"ADF Statistic: {adf[0]:.4f}, p-value: {adf[1]:.4f}")
+
+    p = st.number_input("p", 0, 5, 1)
+    d = st.number_input("d", 0, 2, 1)
+    q = st.number_input("q", 0, 5, 1)
+    s = st.number_input("Seasonal period (s)", 1, 365, 7)
+    steps = st.slider("Days to forecast ahead", 7, 90, 30)
+
+    if st.button("🚀 Train SARIMA Model"):
+        try:
+            model = SARIMAX(ts, order=(p, d, q), seasonal_order=(1, 0, 1, s))
+            results = model.fit(disp=False)
+            future_dates = pd.date_range(ts.index[-1] + pd.Timedelta(days=1), periods=steps, freq="D")
+            forecast = results.predict(start=future_dates[0], end=future_dates[-1])
+
+            fig3, ax3 = plt.subplots(figsize=(10, 5))
+            ax3.plot(ts, label="Historical")
+            ax3.plot(forecast, color="red", label="Forecast")
+            ax3.legend()
+            ax3.set_title("SARIMA Forecast of Daily Average Water Level")
+            st.pyplot(fig3)
+
+            fitted = results.fittedvalues
+            rmse = np.sqrt(mean_squared_error(ts.loc[fitted.index], fitted))
+            mae = mean_absolute_error(ts.loc[fitted.index], fitted)
+            st.metric("RMSE", f"{rmse:.4f}")
+            st.metric("MAE", f"{mae:.4f}")
+        except Exception as e:
+            st.error(f"Model training failed: {e}")
+else:
+    st.info("⏳ SARIMA requires Year, Month, and Day columns to create a date index.")
+
+# ==========================================================
+# 6️⃣ Insights and Recommendations
+# ==========================================================
+st.header("📊 6. Insights and Recommendations Dashboard")
+
+if "flood_occurred" in df.columns and "Month" in df.columns:
+    st.subheader("🌧️ Flood Occurrence by Month")
+    monthly = df.groupby("Month")["flood_occurred"].mean().sort_values(ascending=False)
+    st.bar_chart(monthly)
+    st.write("Top 3 flood-prone months:")
+    st.dataframe(monthly.head(3))
+
+if "Barangay" in df.columns:
+    st.subheader("🏘️ Most Affected Barangays")
+    brgy = df.groupby("Barangay")["Water Level"].mean().sort_values(ascending=False)
+    st.bar_chart(brgy.head(10))
+
+if "Flood Cause" in df.columns:
+    st.subheader("⚠️ Common Flood Causes")
+    causes = df["Flood Cause"].value_counts()
+    st.plotly_chart(px.pie(values=causes.values, names=causes.index, title="Flood Causes Distribution"))
+
+if "Cluster" in df.columns:
+    st.subheader("🧩 Cluster Summary")
+    st.dataframe(df.groupby("Cluster")[["Water Level", "Damage Infrastructure", "Damage Agriculture"]].mean().round(2))
+
+st.markdown("""
+---
+### 🧠 **Key Takeaways**
+- **Peak Flood Season:** December to February  
+- **Top Flood-Prone Barangays:** Poblacion, Imelda, Bunawan Brook  
+- **Main Causes:** Low Pressure Area (LPA), Easterlies, Shearline  
+- **Cluster Insights:**  
+  - Cluster 0 → Frequent low-impact floods  
+  - Cluster 1 → Moderate with agricultural damage  
+  - Cluster 2 → Severe infrastructure damage  
+
+---
+### 🛠 **Recommendations**
+- Strengthen flood defenses in top barangays  
+- Develop early warning systems based on LPA and Shearline alerts  
+- Support flood-resilient crops in agricultural areas  
+- Improve data recording for better model accuracy  
+""")
+
+st.success("✅ Analysis complete! Explore results and plan accordingly.")
