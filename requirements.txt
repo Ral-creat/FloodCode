@@ -1,4 +1,7 @@
-pandas
-matplotlib
 streamlit
-openpyxl
+pandas
+numpy
+matplotlib
+plotly
+scikit-learn
+statsmodels
